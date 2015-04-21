@@ -1,0 +1,170 @@
+(*1*)	MODULE WBDiffFluAorB6AGsVaxV3;
+
+		IMPORT
+			WBDiffODEBlockM,
+(*2*)			Math;
+		
+		TYPE
+			Equations = POINTER TO RECORD (WBDiffODEBlockM.Equations) END;
+			Factory = POINTER TO RECORD (WBDiffODEBlockM.Factory) END;
+
+		
+		CONST
+(*3*)			nEq = 42;
+	
+(*4*)			lambda= 0; f= 1; recov= 2; 
+			b11=3;  b12=4;   b13=5;   b14=6; b15=7; b16=8;
+			b21=9; b22=10; b23=11; b24=12; b25=13; b26=14;
+			b31=15; b32=16; b33=17; b34=18; b35=19; b36=20;
+			b41=21; b42=22; b43=23; b44=24; b45=25; b46=26; 
+			b51=27; b52=28; b53=29; b54=30; b55=31; b56=32;
+			b61=33; b62=34; b63=35; b64=36; b65=37; b66=38;
+			N1=39; N2=40; N3=41; N4=42; N5=43; N6=44; 
+			vaxrate1=45; vaxrate2=46; vaxrate3=47; vaxrate4=48; vaxrate5=49;vaxrate6=50; 
+			vaxeffage1=51; vaxeffage2=52; vaxeffage3=53; vaxeffage4=54; vaxeffage5=55; vaxeffage6=56; 
+
+(*8*)			SU1 = 0;   SV1 = 1;   E1 = 2;     I1 = 3;     R1 = 4;    CUMI1 = 5;   V1=6;
+			SU2 = 7;   SV2 = 8;   E2 = 9;     I2 = 10;   R2 = 11;  CUMI2 = 12; V2=13;
+ 			SU3 = 14; SV3 = 15;  E3 = 16;   I3 = 17;   R3 = 18;  CUMI3 = 19; V3=20;
+ 			SU4 = 21; SV4 = 22;  E4 = 23;   I4 = 24;   R4 = 25;  CUMI4 = 26; V4=27;
+ 			SU5 = 28; SV5 = 29;  E5 = 30;   I5 = 31;   R5 = 32;  CUMI5 = 33; V5=34;
+ 			SU6 = 35; SV6 = 36;  E6 = 37;   I6 = 38;   R6 = 39;  CUMI6 = 40; V6=41;
+ 
+
+		VAR
+			fact-: WBDiffODEBlockM.Factory;
+		
+(*9*)		PROCEDURE (e: Equations) Derivatives (IN theta, C: ARRAY OF REAL; n: INTEGER; t: REAL;
+(*10*)																			OUT dCdt: ARRAY OF REAL);
+(*11*)		VAR
+ 			block: INTEGER;
+(*12*)			vr1, vr2, vr3, vr4, vr5, vr6, ve: REAL; 
+
+(*15*)		BEGIN 
+		  block := e.Block();	 	
+                	  ve:=theta[51];
+                
+	     CASE block OF
+		    |0: 
+		        vr1:= 0;
+		        vr2 := 0;
+		        vr3 := 0;
+		        vr4 := 0;
+		        vr5 := 0;
+				vr6:= 0;
+			
+			|1: 
+			    vr1:=  theta[vaxrate1];
+		        vr2 := theta[vaxrate2];
+		        vr3 := theta[vaxrate3];
+		        vr4 := theta[vaxrate4];
+		        vr5 := theta[vaxrate5];	
+			    vr6:=  theta[vaxrate6];
+		
+			|2: 
+			    vr1:= 0;
+		        vr2 := 0;
+		        vr3 := 0;
+		        vr4 := 0;
+		        vr5 := 0;
+				vr6:= 0;
+				
+    	      END;
+
+(* Note that if  t if we have an imperfect vaccine  a real vaccination program wouldn't vaccinate people more than once in a season (as we wouldn't know if successfully vaccinated or not). Therefore we should instead multiply the effective vaccination rate by the proportion of those people who have not been vaccinated who are susceptible
+i.e [number S and not vaccinated]/[total number not vaccinated]. To do this  we need to keep track of the numbers who are i. both susceptible and unvaccinated and ii. total numbers who are unvaccinated. 
+To do this we have the compartments SU (susceptible unvaccinated), SV (susceptible vaccinated) , V (vaccinated), as well as the usual E (exposed, infected but not yet infectious), I (infected and infectious), R (removed ...immune ...either through infection or vaccination) and CUMI (cumulative number of who have been infected). We have these for each of the 6 age groups. *)
+
+
+	       dCdt[SU1]  := -theta[lambda] * C[SU1] * (1/theta[N1]) * (theta[b11] * C[I1] + theta[b21] * C[I2] + theta[b31] * C[I3]+theta[b41]*C[I4]+theta[b51]*C[I5] +theta[b61]*C[I6]) -vr1*C[SU1]/(theta[N1]-C[V1]);
+	       dCdt[SV1]  := -theta[lambda] * C[SV1] * (1/theta[N1]) * (theta[b11] * C[I1] + theta[b21] * C[I2] + theta[b31] * C[I3]+theta[b41]*C[I4]+theta[b51]*C[I5] +theta[b61]*C[I6]) +vr1*(1-theta[vaxeffage1])*C[SU1]/(theta[N1]-C[V1]);	              	       
+	        dCdt[E1]  := theta[lambda] * (C[SU1] +C[SV1]  )*(1/theta[N1]) * (theta[b11] * C[I1] + theta[b21] * C[I2] + theta[b31] * C[I3]+theta[b41]*C[I4]+theta[b51]*C[I5]+theta[b61]*C[I6])  - theta[f]*C[E1] ;
+	       dCdt[I1] :=  theta[f]*C[E1]  -theta[recov]*C[I1];
+	       dCdt[R1]  :=  theta[recov]*C[I1]+ vr1*theta[vaxeffage1]*C[SU1]/(theta[N1]-C[V1]) ;
+	       dCdt[CUMI1] :=  theta[f]*C[E1]; 
+	       dCdt[V1] :=  vr1;      
+	
+	
+		   dCdt[SU2]  := -theta[lambda] * C[SU2] * (1/theta[N2]) * (theta[b12] * C[I1] + theta[b22] * C[I2] + theta[b32] * C[I3]+theta[b42]*C[I4]+theta[b52]*C[I5] +theta[b62]*C[I6]) -vr2*C[SU2]/(theta[N2]-C[V2]);
+	       dCdt[SV2]  := -theta[lambda] * C[SV2] * (1/theta[N2]) * (theta[b12] * C[I1] + theta[b22] * C[I2] + theta[b32] * C[I3]+theta[b42]*C[I4]+theta[b52]*C[I5] +theta[b62]*C[I6]) +vr2*(1-theta[vaxeffage2])*C[SU2]/(theta[N2]-C[V2]);	              	       
+	        dCdt[E2]  := theta[lambda] * (C[SU2] +C[SV2]  )*(1/theta[N1]) * (theta[b12] * C[I1] + theta[b22] * C[I2] + theta[b32] * C[I3]+theta[b42]*C[I4]+theta[b52]*C[I5]+theta[b62]*C[I6])  - theta[f]*C[E2] ;
+	       dCdt[I2] :=  theta[f]*C[E2]  -theta[recov]*C[I2];
+	       dCdt[R2]  :=  theta[recov]*C[I2]+ vr2*theta[vaxeffage2]*C[SU2]/(theta[N2]-C[V2]) ;
+	       dCdt[CUMI2] :=  theta[f]*C[E2]; 
+	       dCdt[V2] :=  vr2;      
+	
+		  dCdt[SU3]  := -theta[lambda] * C[SU3] * (1/theta[N3]) * (theta[b13] * C[I1] + theta[b23] * C[I2] + theta[b33] * C[I3]+theta[b43]*C[I4]+theta[b53]*C[I5] +theta[b63]*C[I6]) -vr3*C[SU3]/(theta[N3]-C[V3]);
+	       dCdt[SV3]  := -theta[lambda] * C[SV3] * (1/theta[N3]) * (theta[b13] * C[I1] + theta[b23] * C[I2] + theta[b33] * C[I3]+theta[b43]*C[I4]+theta[b53]*C[I5] +theta[b63]*C[I6]) +vr3*(1-theta[vaxeffage3])*C[SU3]/(theta[N3]-C[V3]);	              	       
+	        dCdt[E3]  := theta[lambda] * (C[SU3] +C[SV3]  )*(1/theta[N3]) * (theta[b13] * C[I1] + theta[b23] * C[I2] + theta[b33] * C[I3]+theta[b43]*C[I4]+theta[b53]*C[I5]+theta[b63]*C[I6])  - theta[f]*C[E3] ;
+	       dCdt[I3] :=  theta[f]*C[E3]  -theta[recov]*C[I3];
+	       dCdt[R3]  :=  theta[recov]*C[I3]+ vr3*theta[vaxeffage3]*C[SU3]/(theta[N3]-C[V3]) ;
+	       dCdt[CUMI3] :=  theta[f]*C[E3]; 
+	       dCdt[V3] :=  vr3;      
+	
+		  dCdt[SU4]  := -theta[lambda] * C[SU4] * (1/theta[N4]) * (theta[b14] * C[I1] + theta[b24] * C[I2] + theta[b34] * C[I3]+theta[b44]*C[I4]+theta[b54]*C[I5] +theta[b64]*C[I6]) -vr4*C[SU4]/(theta[N4]-C[V4]);
+	       dCdt[SV4]  := -theta[lambda] * C[SV4] * (1/theta[N4]) * (theta[b14] * C[I1] + theta[b24] * C[I2] + theta[b34] * C[I3]+theta[b44]*C[I4]+theta[b54]*C[I5] +theta[b64]*C[I6]) +vr4*(1-theta[vaxeffage4])*C[SU4]/(theta[N4]-C[V4]);	              	       
+	        dCdt[E4]  := theta[lambda] * (C[SU4] +C[SV4]  )*(1/theta[N4]) * (theta[b14] * C[I1] + theta[b24] * C[I2] + theta[b34] * C[I3]+theta[b44]*C[I4]+theta[b54]*C[I5]+theta[b64]*C[I6])  - theta[f]*C[E4] ;
+	       dCdt[I4] :=  theta[f]*C[E4]  -theta[recov]*C[I4];
+	       dCdt[R4]  :=  theta[recov]*C[I4]+ vr4*theta[vaxeffage4]*C[SU4]/(theta[N4]-C[V4]) ;
+	       dCdt[CUMI4] :=  theta[f]*C[E4]; 
+	       dCdt[V4] :=  vr4;      
+	
+	
+		  dCdt[SU5]  := -theta[lambda] * C[SU5] * (1/theta[N5]) * (theta[b15] * C[I1] + theta[b25] * C[I2] + theta[b35] * C[I3]+theta[b45]*C[I4]+theta[b55]*C[I5] +theta[b65]*C[I6]) -vr5*C[SU5]/(theta[N5]-C[V5]);
+	       dCdt[SV5]  := -theta[lambda] * C[SV5] * (1/theta[N5]) * (theta[b15] * C[I1] + theta[b25] * C[I2] + theta[b35] * C[I3]+theta[b45]*C[I4]+theta[b55]*C[I5] +theta[b65]*C[I6]) +vr5*(1-theta[vaxeffage5])*C[SU5]/(theta[N5]-C[V5]);	              	       
+	        dCdt[E5]  := theta[lambda] * (C[SU5] +C[SV5]  )*(1/theta[N5]) * (theta[b15] * C[I1] + theta[b25] * C[I2] + theta[b35] * C[I3]+theta[b45]*C[I4]+theta[b55]*C[I5]+theta[b65]*C[I6])  - theta[f]*C[E5] ;
+	       dCdt[I5] :=  theta[f]*C[E5]  -theta[recov]*C[I5];
+	       dCdt[R5]  :=  theta[recov]*C[I5]+ vr5*theta[vaxeffage5]*C[SU5]/(theta[N5]-C[V5]) ;
+	       dCdt[CUMI5] :=  theta[f]*C[E5]; 
+	       dCdt[V5] :=  vr5;      
+	
+	
+		  dCdt[SU6]  := -theta[lambda] * C[SU6] * (1/theta[N6]) * (theta[b16] * C[I1] + theta[b26] * C[I2] + theta[b36] * C[I3]+theta[b46]*C[I4]+theta[b56]*C[I5] +theta[b66]*C[I6]) -vr6*C[SU6]/(theta[N6]-C[V6]);
+	       dCdt[SV6]  := -theta[lambda] * C[SV6] * (1/theta[N6]) * (theta[b16] * C[I1] + theta[b26] * C[I2] + theta[b36] * C[I3]+theta[b46]*C[I4]+theta[b56]*C[I5] +theta[b66]*C[I6]) +vr6*(1-theta[vaxeffage6])*C[SU6]/(theta[N6]-C[V6]);	              	       
+	        dCdt[E6]  := theta[lambda] * (C[SU6] +C[SV6]  )*(1/theta[N6]) * (theta[b16] * C[I1] + theta[b26] * C[I2] + theta[b36] * C[I3]+theta[b46]*C[I4]+theta[b56]*C[I5]+theta[b66]*C[I6])  - theta[f]*C[E6] ;
+	       dCdt[I6] :=  theta[f]*C[E6]  -theta[recov]*C[I6];
+	       dCdt[R6]  :=  theta[recov]*C[I6]+ vr6*theta[vaxeffage6]*C[SU6]/(theta[N6]-C[V6]) ;
+	       dCdt[CUMI6] :=  theta[f]*C[E6]; 
+	       dCdt[V6] :=  vr6;      
+	
+(*35*)		END Derivatives;
+		
+		PROCEDURE (equations: Equations) SecondDerivatives (IN theta, x: ARRAY OF REAL;
+																								numEq: INTEGER; t: REAL;
+																								OUT d2xdt2: ARRAY OF REAL);
+		BEGIN
+			HALT(126)
+		END SecondDerivatives;
+
+		PROCEDURE (equations: Equations) Jacobian (IN theta, x: ARRAY OF REAL;
+																					numEq: INTEGER; t: REAL;
+																					OUT jacob: ARRAY OF ARRAY OF REAL);
+		BEGIN
+			HALT(126)
+		END Jacobian;
+
+		PROCEDURE (f: Factory) New (option: INTEGER): WBDiffODEBlockM.GraphNode;
+		VAR
+			equations: Equations;
+			node: WBDiffODEBlockM.GraphNode;
+		BEGIN
+			NEW(equations);
+			node := WBDiffODEBlockM.New(equations, nEq);
+			RETURN node
+		END New;
+			
+		PROCEDURE Install*;
+		BEGIN
+			WBDiffODEBlockM.Install(fact)
+		END Install;
+			
+		PROCEDURE Init;
+		VAR
+			f: Factory;
+		BEGIN
+			NEW(f); fact := f
+		END Init;
+		
+	BEGIN
+		Init
+(*1*)	END WBDiffFluAorB6AGsVaxV3.

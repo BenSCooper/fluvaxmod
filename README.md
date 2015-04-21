@@ -28,7 +28,7 @@ six age group model flu AandB (with vax)- hardwired v4.5.txt
 changing path names to relevant paths for files on your sytem.
 
 
-5. Put the file FluAorB6AGsVaxV3.odc into the BlackBox Component Builder subdirectory \WBDiff\Mod
+5. Open the file FluAorB6AGsVaxV3.txt within Winbugs and Save as type ".odc". Put the saved file FluAorB6AGsVaxV3.odc into the BlackBox Component Builder subdirectory \WBDiff\Mod
 
 6. Open the file \WBDiff\Mod\FluAorB6AGsVaxV3.odc and compile it by selecting Compile from the Dev menu. 
 

@@ -1,0 +1,10 @@
+# inits for LAIV VE meta-analysis 
+
+list(
+d = -0.1353,
+delta = -1.0937,
+m = -1.25453,
+mu = c(-1.7021,-1.9181) ,
+mu.new = -1.0706,
+tau = 0.1020,
+tau2 = 0.1960)

@@ -1,0 +1,42 @@
+# Vaccine efficacy data 
+#  
+# cv is cases in the vaccine group
+# nv is the number in the vaccine group
+# 
+# cc is cases in the control group 
+# nc is number in the ctonrol group
+# 
+# Data are from Hoberman Jama 2003 vol 290 no. 12 for TIV in those less than 24 months
+# And from Loeb Jama 2010 Vol 303 no. 10 for TIV in those aged 36 months to 15 yeras 
+# And from Clover JID 1991 for children 3-9 who received two doses of TIV (flu A outcomes only)
+# Results below are from per protocol analysis where outcome is any confirmed influenza case.
+# [per protocol is most relevant, as the model accounts for the fact that not everyone receives the vaccine - 
+# and the parameter estimates are for those who do receive the vaccine] 
+
+
+
+	     list(
+#	      t.lt2.cv=c( 15,9),  # outcomes in those less than 2 yrs from Hoberman 2003  [not currently used]
+#	      t.lt2.nv=c(273,252),
+#	      t.lt2.cc=c(22,4),
+#	      t.lt2.nc=c(138,123),
+#	  	t.lt2.Num=2,
+      	t.lt15.cv=c(41,6),  # outcomes in those 36 months to 15 yrs from Loeb 2010* and from 3-9 years from Clover (results from table 4)
+	      t.lt15.nv=c(502,30),
+	      t.lt15.cc=c(79, 15),
+	      t.lt15.nc=c(445,33),
+	      mean.cluster.size=c(19.3, 1.959), # for Clover cluster size is based on a total of 192 families with 98 children in age range (we don't specifically know how many households that actual 63 included for ew
+	      ICC=c(0.004, 0.004),  #  ICC only reported by Loeb et al but use the same value for both
+	  	t.lt15.Num=2	
+	)
+
+#  Note that for both Loeb and Clover randomization is at cluster level but analysis is at individual level (as cluster data to allow cluster analysis are not reported - result will be that uncertainty is underestimated if the ICC is not accounted for)
+
+ # Note that relevant numbers in Loeb 2010 are not directly reported, but can be derived from numbers in abstract.
+  # Of 502 vaccinated, number with confirmed flu was 80-39=41.
+  # Of 445 vaccinated with control vaccine 159-80=79 had confirmed flu
+  # cluster randomized - which should really be accounted for but since ICC was very small probable OK to ignore.
+
+# Note also that for the Loeb studiy #"Those younger than 9 years who were previ- ously unvaccinated at the time of immu- nization received a second 0.5-mL #dose of the influenza vaccine 4 weeks after the first vaccine pursuant to influenza im- munization recommendations"
+
+# Do not include Cowling CID 2012 or Klick Vaccine 2013, as these only used a single dose of seasonal TIV.

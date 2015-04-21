@@ -1,0 +1,49 @@
+# Vaccine efficacy data 
+# Data
+#  
+# cv is cases in the vaccine group
+# nv is the number in the vaccine group
+# 
+# cc is cases in the control group 
+# nc is number in the ctonrol group
+# 
+#  Numbers below are from studies largely or entirely in target age range (2-15 years)
+#  Only include studies in right age range (2-15_  and where children under 9 receive either two doses , 
+# or one  dose if vaccinated the previous year
+# Data are from 
+# i) Belshe 1998: Chidlren aged 15 months to 71 months (mean age about 40 months). Use two dose per porotocl results. 
+# ii) Belshe 2000: children aged 26 to o 85 months (mean age about 50 months). All revaccinated. (so previously vaccinated)
+# Do not include Klick et al Vaccine 2013 as  no children received two doses of seasonal vaccine
+ # (in first year only pandemic vaccine was used).
+ # Do not include Vesikari 2006 or Tam  2007 as median age is less than 2
+
+	     list(cv=c( 10,15),
+	      nv=c(849, 917),
+	      cc=c(74, 56),
+	      nc=c(410,441),
+	  	Num=2)
+
+
+#  Numbers below are from studies largely or entirely in Asia
+# These data are used for sensitivity analysis 3 (to use uncomment below and comment out lines above)
+# Data are from Tam 2007 (year 1 all, and year 2 group who received placebo in year 1)
+# And from Lum 
+# 
+# Results below are from per protocol analysis where outcome is any confirmed influenza case.
+# [per protocol seems most relevant, as the model accounts for the fact that not everyone receives the vaccine - 
+# and the parameter estimates are for those who do receive the vaccine]
+
+#	     list(cv=c( 81,26,23),
+#	      nv=c(1653,503,765),
+#	      cc=c(182,59,32),
+#	      nc=c(1111,494,385),
+#	  	Num=3)
+
+#Results below are from ITT analysis from the same studies as above where outcome is any confirmed influenza #case.
+	 # 
+	 #     list(cv=c( 98,26,28),
+	 #     nv=c(1900,503,819),
+	 #     cc=c(204,59,39),
+	 #     nc=c(1274,494,413),
+	 # 	Num=3)
+	

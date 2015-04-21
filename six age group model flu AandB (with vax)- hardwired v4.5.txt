@@ -1,0 +1,2145 @@
+#  Winbugs code fitting age-structured SEIR model (with 6 age groups) to influenza surveillance data for three influenza types (typically A/H1N1, A/H3N2 & B) evaluating the costs and health outcomes
+#  associated with six different vaccination policies. Note that when running the model we fit to one year's data at a time. Note also that the SEIR model is implemented as a set of coupled ordinary
+#  differential equations which are implemented in BlackBox and compiled to ensure running speed is sufficient for practical use (even on a moderately fast workstation, the alternative implementation
+#  of the SEIR model, in interpreted WinBUGs, runs too slowly to be of practical use with our data).
+
+
+
+model{
+temp<-origin
+# ****************************************************************************************************************************
+# 1.  Health and economic outcomes: make changes here to costs and DALYs associated with outcomes
+
+
+# 1a. Parameters for health outcomes
+ probsymptoms~dbeta(85.78626, 43.0219)  #based on  Carratt et al AJE 2007 
+#"The proportion of symptomatic infection (any symptoms) was 66.9 percent (95 percent CI: 58.3, 74.5). 
+#No significant difference was noted according to the virus type
+# beta parameters give mean of 67% and 95% C of .583 to .745
+# (in a sensitivity analyses we use a much lower value taken from Horby et al. AJE 2012)
+
+
+prob.infection.is.symptomaticAH1[1]<-probsymptoms  
+prob.infection.is.symptomaticAH1[2]<-probsymptoms
+prob.infection.is.symptomaticAH1[3]<-probsymptoms
+prob.infection.is.symptomaticAH1[4]<-probsymptoms
+prob.infection.is.symptomaticAH1[5]<-probsymptoms
+prob.infection.is.symptomaticAH1[6]<-probsymptoms
+prob.infection.is.symptomaticAH3[1]<-probsymptoms  
+prob.infection.is.symptomaticAH3[2]<-probsymptoms
+prob.infection.is.symptomaticAH3[3]<-probsymptoms
+prob.infection.is.symptomaticAH3[4]<-probsymptoms
+prob.infection.is.symptomaticAH3[5]<-probsymptoms
+prob.infection.is.symptomaticAH3[6]<-probsymptoms
+prob.infection.is.symptomaticB[1]<-probsymptoms
+prob.infection.is.symptomaticB[2]<-probsymptoms
+prob.infection.is.symptomaticB[3]<-probsymptoms
+prob.infection.is.symptomaticB[4]<-probsymptoms
+prob.infection.is.symptomaticB[5]<-probsymptoms
+prob.infection.is.symptomaticB[6]<-probsymptoms
+
+
+
+# Estimates below assume a fixed proportion of IPD and ILI are not due to flu, all others above baseline is flu
+# the baseline for each age group is taken as the minimum value in that age group
+for(a in 1:6){
+ prob.symptomatic.to.IPD[a]<-probIPDperflucase[a]
+ prob.symptomatic.to.OPD[a]<-probOPDperflucase[a]
+}
+
+
+# Mortality data
+
+# values based on regression model of flu deaths external to this model 
+
+for(i in 1:6){ 
+  precH1DeathsPer100k[i]<-1/VarH1DeathsPer100k[i]
+  precH3DeathsPer100k[i]<-1/VarH3DeathsPer100k[i]
+  precBDeathsPer100k[i]<-1/VarBDeathsPer100k[i]
+  temp.d.H1[i]~dnorm(MeanH1DeathsPer100k[i], precH1DeathsPer100k[i]) 
+  d.H1[i]<-max( temp.d.H1[i],0)
+  FluDeaths.H1[i]<-d.H1[i]*N[i]/100000
+  temp.d.H3[i]~dnorm(MeanH3DeathsPer100k[i], precH3DeathsPer100k[i]) 
+  d.H3[i]<-max( temp.d.H3[i],0)
+  FluDeaths.H3[i]<-d.H3[i]*N[i]/100000
+  temp.d.B[i]~dnorm(MeanBDeathsPer100k[i], precBDeathsPer100k[i]) 
+  d.B[i]<-max( temp.d.B[i],0)
+  FluDeaths.B[i]<-0 #  baseline assumption is no mortality from B
+  prob.symptomatic.to.death.H1[i]<-FluDeaths.H1[i]/symptomatic.novacc.H1[i] 
+  prob.symptomatic.to.death.H3[i]<-FluDeaths.H3[i]/symptomatic.novacc.H3[i] 
+  prob.symptomatic.to.death.B[i]<-FluDeaths.B[i]/symptomatic.novacc.B[i] 
+}
+
+
+# DALYS associated with a non-hospitalized and surviving symptomatic case 
+
+DALYpersym~dgamma(7.72, 1543.2) 
+DALY.per.symptomatic[1]<-DALYpersym
+DALY.per.symptomatic[2]<-DALYpersym
+DALY.per.symptomatic[3]<-DALYpersym
+DALY.per.symptomatic[4]<-DALYpersym
+DALY.per.symptomatic[5]<-DALYpersym
+DALY.per.symptomatic[6]<-DALYpersym
+
+# DALYS associated with a Outpatients 
+# See Lugner 2012 
+DALYperOPD~dgamma(1,125) #mean=0.008, var=.000064
+DALY.per.OPD[1]<-DALYperOPD	
+DALY.per.OPD[2]<-DALYperOPD
+DALY.per.OPD[3]<-DALYperOPD
+DALY.per.OPD[4]<-DALYperOPD
+DALY.per.OPD[5]<-DALYperOPD
+DALY.per.OPD[6]<-DALYperOPD
+
+# DALYS associated with a inpatients 
+# See Lugner 2012 
+DALYperIPD~dgamma(1, 46.083)
+DALY.per.IPD[1]<-DALYperIPD
+DALY.per.IPD[2]<-DALYperIPD
+DALY.per.IPD[3]<-DALYperIPD
+DALY.per.IPD[4]<-DALYperIPD
+DALY.per.IPD[5]<-DALYperIPD
+DALY.per.IPD[6]<-DALYperIPD
+
+# DALYS from vaccine adverse events
+
+HundredsofDALYs.per.vax~dgamma(1.5544, 503793) 
+DALYs.per.vax<-HundredsofDALYs.per.vax/100   
+
+
+#  Derive years of life lost for age groups from table 3 Zhou et al Am J Epidemiol PMID: 23978528 
+# which adjusts for underlying illness. Aim to get same means and approximately same CIs 
+# YLLs below are from several people, to get LYlost per person (which we take as DALYs) we just divide
+# by number of people in each age group (table 3 of the Zhou paper)
+
+YLL0to19 ~  dgamma(111.12, 0.49)
+YLL20to34 ~  dgamma(69.8, 0.25)
+YLL35to49 ~  dgamma(146.6, 0.32)
+YLL50to64 ~  dgamma(103.88, 0.27)
+YLL65plus ~  dgamma(54.16, 0.31)
+
+
+# Rescale estimates years of life loss to account for shorter LE in Thailand (74.9 yrs) compared to HK (83.8 yrs)
+
+YLL0to19.Thai<- YLL0to19*74.9/83.8
+YLL20to34.Thai<- YLL20to34*74.9/83.8
+YLL35to49.Thai<- YLL35to49*74.9/83.8
+YLL50to64.Thai<- YLL50to64*74.9/83.8
+YLL65plus.Thai<- YLL65plus*74.9/83.8
+
+#equating DALYs with YLL.. 
+
+DALY.per.death[1]<- YLL0to19/3   # since 3 deaths in 0 to 19 year olds in Zhou et al
+DALY.per.death[2]<- YLL0to19/3   # since 3 deaths in 0 to 19 year olds in Zhou et al
+DALY.per.death[3]<- YLL0to19/3   # since 3 deaths in 0 to 19 year olds in Zhou et al
+DALY.per.death[4]<- YLL0to19/3   # since 3 deaths in 0 to 19 year olds in Zhou et al
+
+DALY.per.death[5]<- (YLL20to34 *7/45 + YLL35to49 *   14/45 + YLL50to64* 24/45)/45  
+ #since 3, 14 and 24  deaths in age groups
+DALY.per.death[6]<- YLL65plus/24   # since 24 deaths in 0 to 19 year olds in Zhou et al
+
+
+
+
+
+# 1b. Calculate health outcomes
+
+for(i in 1:6){  # i here indexes age
+  symptomatic.novacc[i]<-CumInfectionsAH1[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsB[i,365]*prob.infection.is.symptomaticB[i]
+
+  symptomatic.novacc.H1[i]<-CumInfectionsAH1[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.novacc.H3[i]<-CumInfectionsAH3[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.novacc.B[i]<-CumInfectionsB[i,365]*prob.infection.is.symptomaticB[i]
+
+  symptomatic.vacc1[i]<-CumInfectionsAH1vacc1[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3vacc1[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsBvacc1[i,365]*prob.infection.is.symptomaticB[i]  
+
+  symptomatic.vacc1.H1[i]<-CumInfectionsAH1vacc1[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.vacc1.H3[i]<-CumInfectionsAH3vacc1[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.vacc1.B[i]<-CumInfectionsBvacc1[i,365]*prob.infection.is.symptomaticB[i]
+
+
+  symptomatic.vacc2[i]<-CumInfectionsAH1vacc2[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3vacc2[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsBvacc2[i,365]*prob.infection.is.symptomaticB[i]  
+
+  symptomatic.vacc2.H1[i]<-CumInfectionsAH1vacc2[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.vacc2.H3[i]<-CumInfectionsAH3vacc2[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.vacc2.B[i]<-CumInfectionsBvacc2[i,365]*prob.infection.is.symptomaticB[i]
+
+
+  symptomatic.vacc3[i]<-CumInfectionsAH1vacc3[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3vacc3[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsBvacc3[i,365]*prob.infection.is.symptomaticB[i]  
+
+  symptomatic.vacc3.H1[i]<-CumInfectionsAH1vacc3[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.vacc3.H3[i]<-CumInfectionsAH3vacc3[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.vacc3.B[i]<-CumInfectionsBvacc3[i,365]*prob.infection.is.symptomaticB[i]
+
+
+   symptomatic.vacc4[i]<-CumInfectionsAH1vacc4[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3vacc4[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsBvacc4[i,365]*prob.infection.is.symptomaticB[i]  
+
+  symptomatic.vacc4.H1[i]<-CumInfectionsAH1vacc4[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.vacc4.H3[i]<-CumInfectionsAH3vacc4[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.vacc4.B[i]<-CumInfectionsBvacc4[i,365]*prob.infection.is.symptomaticB[i]
+
+
+  symptomatic.vacc5[i]<-CumInfectionsAH1vacc5[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3vacc5[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsBvacc5[i,365]*prob.infection.is.symptomaticB[i]  
+
+  symptomatic.vacc5.H1[i]<-CumInfectionsAH1vacc5[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.vacc5.H3[i]<-CumInfectionsAH3vacc5[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.vacc5.B[i]<-CumInfectionsBvacc5[i,365]*prob.infection.is.symptomaticB[i]
+
+
+   symptomatic.vacc6[i]<-CumInfectionsAH1vacc6[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3vacc6[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsBvacc6[i,365]*prob.infection.is.symptomaticB[i]  
+
+  symptomatic.vacc6.H1[i]<-CumInfectionsAH1vacc6[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.vacc6.H3[i]<-CumInfectionsAH3vacc6[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.vacc6.B[i]<-CumInfectionsBvacc6[i,365]*prob.infection.is.symptomaticB[i]
+
+   symptomatic.vacc7[i]<-CumInfectionsAH1vacc7[i,365]*prob.infection.is.symptomaticAH1[i]+CumInfectionsAH3vacc7[i,365]*prob.infection.is.symptomaticAH3[i] +CumInfectionsBvacc7[i,365]*prob.infection.is.symptomaticB[i]  
+
+  symptomatic.vacc7.H1[i]<-CumInfectionsAH1vacc7[i,365]*prob.infection.is.symptomaticAH1[i]
+  symptomatic.vacc7.H3[i]<-CumInfectionsAH3vacc7[i,365]*prob.infection.is.symptomaticAH3[i]
+  symptomatic.vacc7.B[i]<-CumInfectionsBvacc7[i,365]*prob.infection.is.symptomaticB[i]
+
+  OPD.novacc[i]<-symptomatic.novacc[i]*prob.symptomatic.to.OPD[i]
+  OPD.vacc1[i]<-symptomatic.vacc1[i]*prob.symptomatic.to.OPD[i]
+  OPD.vacc2[i]<-symptomatic.vacc2[i]*prob.symptomatic.to.OPD[i]
+  OPD.vacc3[i]<-symptomatic.vacc3[i]*prob.symptomatic.to.OPD[i]
+  OPD.vacc4[i]<-symptomatic.vacc4[i]*prob.symptomatic.to.OPD[i]
+  OPD.vacc5[i]<-symptomatic.vacc5[i]*prob.symptomatic.to.OPD[i]
+  OPD.vacc6[i]<-symptomatic.vacc6[i]*prob.symptomatic.to.OPD[i]
+  OPD.vacc7[i]<-symptomatic.vacc7[i]*prob.symptomatic.to.OPD[i]
+
+  IPD.novacc[i]<-symptomatic.novacc[i]*prob.symptomatic.to.IPD[i]
+  IPD.vacc1[i]<-symptomatic.vacc1[i]*prob.symptomatic.to.IPD[i]
+  IPD.vacc2[i]<-symptomatic.vacc2[i]*prob.symptomatic.to.IPD[i]
+  IPD.vacc3[i]<-symptomatic.vacc3[i]*prob.symptomatic.to.IPD[i]
+  IPD.vacc4[i]<-symptomatic.vacc4[i]*prob.symptomatic.to.IPD[i]
+  IPD.vacc5[i]<-symptomatic.vacc5[i]*prob.symptomatic.to.IPD[i]
+  IPD.vacc6[i]<-symptomatic.vacc6[i]*prob.symptomatic.to.IPD[i]
+  IPD.vacc7[i]<-symptomatic.vacc7[i]*prob.symptomatic.to.IPD[i]
+
+
+  death.novacc[i]<-symptomatic.novacc.H1[i]*prob.symptomatic.to.death.H1[i] + symptomatic.novacc.H3[i]*prob.symptomatic.to.death.H3[i] +symptomatic.novacc.B[i]*prob.symptomatic.to.death.B[i] 
+  death.vacc1[i]<-symptomatic.vacc1.H1[i]*prob.symptomatic.to.death.H1[i]+symptomatic.vacc1.H3[i]*prob.symptomatic.to.death.H3[i]+symptomatic.vacc1.B[i]*prob.symptomatic.to.death.B[i]
+
+  death.vacc2[i]<-symptomatic.vacc2.H1[i]*prob.symptomatic.to.death.H1[i]+symptomatic.vacc2.H3[i]*prob.symptomatic.to.death.H3[i]+symptomatic.vacc2.B[i]*prob.symptomatic.to.death.B[i]
+
+  death.vacc3[i]<-symptomatic.vacc3.H1[i]*prob.symptomatic.to.death.H1[i]+symptomatic.vacc3.H3[i]*prob.symptomatic.to.death.H3[i]+symptomatic.vacc3.B[i]*prob.symptomatic.to.death.B[i]
+
+  death.vacc4[i]<-symptomatic.vacc4.H1[i]*prob.symptomatic.to.death.H1[i]+symptomatic.vacc4.H3[i]*prob.symptomatic.to.death.H3[i]+symptomatic.vacc4.B[i]*prob.symptomatic.to.death.B[i]
+
+  death.vacc5[i]<-symptomatic.vacc5.H1[i]*prob.symptomatic.to.death.H1[i]+symptomatic.vacc5.H3[i]*prob.symptomatic.to.death.H3[i]+symptomatic.vacc5.B[i]*prob.symptomatic.to.death.B[i]
+
+  death.vacc6[i]<-symptomatic.vacc6.H1[i]*prob.symptomatic.to.death.H1[i]+symptomatic.vacc6.H3[i]*prob.symptomatic.to.death.H3[i]+symptomatic.vacc6.B[i]*prob.symptomatic.to.death.B[i]
+
+  death.vacc7[i]<-symptomatic.vacc7.H1[i]*prob.symptomatic.to.death.H1[i]+symptomatic.vacc7.H3[i]*prob.symptomatic.to.death.H3[i]+symptomatic.vacc7.B[i]*prob.symptomatic.to.death.B[i]
+
+  DALY.novacc[i]<-symptomatic.novacc[i]*DALY.per.symptomatic[i]+  OPD.novacc[i]*DALY.per.OPD[i] +     IPD.novacc[i]*DALY.per.IPD[i] +  death.novacc[i]*DALY.per.death[i]
+
+  DALY.vacc1[i]<-symptomatic.vacc1[i]*DALY.per.symptomatic[i]+  OPD.vacc1[i]*DALY.per.OPD[i] +     IPD.vacc1[i]*DALY.per.IPD[i] +  death.vacc1[i]*DALY.per.death[i]
+
+  DALY.vacc2[i]<-symptomatic.vacc2[i]*DALY.per.symptomatic[i]+  OPD.vacc2[i]*DALY.per.OPD[i] +     IPD.vacc2[i]*DALY.per.IPD[i] +  death.vacc2[i]*DALY.per.death[i]
+
+  DALY.vacc3[i]<-symptomatic.vacc3[i]*DALY.per.symptomatic[i]+  OPD.vacc3[i]*DALY.per.OPD[i] +     IPD.vacc3[i]*DALY.per.IPD[i] +  death.vacc3[i]*DALY.per.death[i]
+
+   DALY.vacc4[i]<-symptomatic.vacc4[i]*DALY.per.symptomatic[i]+  OPD.vacc4[i]*DALY.per.OPD[i] +     IPD.vacc4[i]*DALY.per.IPD[i] +  death.vacc4[i]*DALY.per.death[i]
+
+ DALY.vacc5[i]<-symptomatic.vacc5[i]*DALY.per.symptomatic[i]+  OPD.vacc5[i]*DALY.per.OPD[i] +     IPD.vacc5[i]*DALY.per.IPD[i] +  death.vacc5[i]*DALY.per.death[i]
+
+ DALY.vacc6[i]<-symptomatic.vacc6[i]*DALY.per.symptomatic[i]+  OPD.vacc6[i]*DALY.per.OPD[i] +     IPD.vacc6[i]*DALY.per.IPD[i] +  death.vacc6[i]*DALY.per.death[i]
+
+ DALY.vacc7[i]<-symptomatic.vacc7[i]*DALY.per.symptomatic[i]+  OPD.vacc7[i]*DALY.per.OPD[i] +     IPD.vacc7[i]*DALY.per.IPD[i] +  death.vacc7[i]*DALY.per.death[i]
+
+symptomatic.cases.averted.vacc1[i]<- symptomatic.novacc[i] - symptomatic.vacc1[i] 
+symptomatic.cases.averted.vacc2[i]<- symptomatic.novacc[i] - symptomatic.vacc2[i] 
+symptomatic.cases.averted.vacc3[i]<- symptomatic.novacc[i] - symptomatic.vacc3[i] 
+symptomatic.cases.averted.vacc4[i]<- symptomatic.novacc[i] - symptomatic.vacc4[i] 
+symptomatic.cases.averted.vacc5[i]<- symptomatic.novacc[i] - symptomatic.vacc5[i] 
+symptomatic.cases.averted.vacc6[i]<- symptomatic.novacc[i] - symptomatic.vacc6[i] 
+symptomatic.cases.averted.vacc7[i]<- symptomatic.novacc[i] - symptomatic.vacc7[i] 
+
+
+OPD.averted.vacc1[i]<-   OPD.novacc[i] - OPD.vacc1[i]
+OPD.averted.vacc2[i]<-   OPD.novacc[i] - OPD.vacc2[i] 
+OPD.averted.vacc3[i]<-   OPD.novacc[i] - OPD.vacc3[i] 
+OPD.averted.vacc4[i]<-   OPD.novacc[i] - OPD.vacc4[i] 
+OPD.averted.vacc5[i]<-   OPD.novacc[i] - OPD.vacc5[i] 
+OPD.averted.vacc6[i]<-   OPD.novacc[i] - OPD.vacc6[i] 
+OPD.averted.vacc7[i]<-   OPD.novacc[i] - OPD.vacc7[i] 
+
+
+IPD.averted.vacc1[i]<-     IPD.novacc[i] - IPD.vacc1[i] 
+IPD.averted.vacc2[i]<-     IPD.novacc[i]  - IPD.vacc2[i] 
+IPD.averted.vacc3[i]<-     IPD.novacc[i]  - IPD.vacc3[i] 
+IPD.averted.vacc4[i]<-     IPD.novacc[i]  - IPD.vacc4[i] 
+IPD.averted.vacc5[i]<-     IPD.novacc[i]  - IPD.vacc5[i] 
+IPD.averted.vacc6[i]<-     IPD.novacc[i]  - IPD.vacc6[i]   
+IPD.averted.vacc7[i]<-     IPD.novacc[i]  - IPD.vacc7[i]   
+
+deaths.averted.vacc1[i]<- death.novacc[i]  - death.vacc1[i] 
+deaths.averted.vacc2[i]<- death.novacc[i]  - death.vacc2[i]
+deaths.averted.vacc3[i]<- death.novacc[i]  - death.vacc3[i]
+deaths.averted.vacc4[i]<- death.novacc[i]  - death.vacc4[i]
+deaths.averted.vacc5[i]<- death.novacc[i]  - death.vacc5[i]
+deaths.averted.vacc6[i]<- death.novacc[i]  - death.vacc6[i]
+deaths.averted.vacc7[i]<- death.novacc[i]  - death.vacc7[i]
+
+# need this below to calc relative importance of direct and indirect DALYs averted
+
+ DALY.per.infection.H1N1[i]<-CumInfectionsAH1[i,365]*prob.infection.is.symptomaticAH1[i]* (DALY.per.symptomatic[i]+  prob.symptomatic.to.OPD[i]*DALY.per.OPD[i] +   prob.symptomatic.to.IPD[i]*DALY.per.IPD[i] + prob.symptomatic.to.death.H1[i] *DALY.per.death[i] )/ CumInfectionsAH1[i,365]
+
+ DALY.per.infection.H3N2[i]<-CumInfectionsAH3[i,365]*prob.infection.is.symptomaticAH3[i]* (DALY.per.symptomatic[i]+  prob.symptomatic.to.OPD[i]*DALY.per.OPD[i] +   prob.symptomatic.to.IPD[i]*DALY.per.IPD[i] + prob.symptomatic.to.death.H3[i] *DALY.per.death[i] )/  CumInfectionsAH3[i,365]
+
+ DALY.per.infection.B[i]<-CumInfectionsB[i,365]*prob.infection.is.symptomaticB[i]* (DALY.per.symptomatic[i]+   prob.symptomatic.to.OPD[i]*DALY.per.OPD[i] +   prob.symptomatic.to.IPD[i]*DALY.per.IPD[i] +  prob.symptomatic.to.death.H3[i] *DALY.per.death[i] )/ CumInfectionsB[i,365]
+
+# calculate DALYs averted by direct protection in each age group
+
+DeltaDirectDALYvacc1[i]<-sum(PreventedNewInfectionsAH1.DirectProtVacc1[i,1:n.grid])*DALY.per.infection.H1N1[i]   + sum(PreventedNewInfectionsAH3.DirectProtVacc1[i,1:n.grid])*DALY.per.infection.H3N2[i]  +
+sum(PreventedNewInfectionsB.DirectProtVacc1[i,1:n.grid])*DALY.per.infection.B[i] 
+
+DeltaDirectDALYvacc2[i]<-sum(PreventedNewInfectionsAH1.DirectProtVacc2[i,1:n.grid])*DALY.per.infection.H1N1[i]   + sum(PreventedNewInfectionsAH3.DirectProtVacc2[i,1:n.grid])*DALY.per.infection.H3N2[i]  +
+sum(PreventedNewInfectionsB.DirectProtVacc2[i,1:n.grid])*DALY.per.infection.B[i] 
+
+DeltaDirectDALYvacc3[i]<-sum(PreventedNewInfectionsAH1.DirectProtVacc3[i,1:n.grid])*DALY.per.infection.H1N1[i]   + sum(PreventedNewInfectionsAH3.DirectProtVacc3[i,1:n.grid])*DALY.per.infection.H3N2[i]  +
+sum(PreventedNewInfectionsB.DirectProtVacc3[i,1:n.grid])*DALY.per.infection.B[i] 
+
+DeltaDirectDALYvacc4[i]<-sum(PreventedNewInfectionsAH1.DirectProtVacc4[i,1:n.grid])*DALY.per.infection.H1N1[i]   + sum(PreventedNewInfectionsAH3.DirectProtVacc4[i,1:n.grid])*DALY.per.infection.H3N2[i] + sum(PreventedNewInfectionsB.DirectProtVacc4[i,1:n.grid])*DALY.per.infection.B[i] 
+
+DeltaDirectDALYvacc5[i]<-sum(PreventedNewInfectionsAH1.DirectProtVacc5[i,1:n.grid])*DALY.per.infection.H1N1[i]   + sum(PreventedNewInfectionsAH3.DirectProtVacc5[i,1:n.grid])*DALY.per.infection.H3N2[i]  +
+sum(PreventedNewInfectionsB.DirectProtVacc5[i,1:n.grid])*DALY.per.infection.B[i] 
+
+DeltaDirectDALYvacc6[i]<-sum(PreventedNewInfectionsAH1.DirectProtVacc6[i,1:n.grid])*DALY.per.infection.H1N1[i]  + sum(PreventedNewInfectionsAH3.DirectProtVacc6[i,1:n.grid])*DALY.per.infection.H3N2[i] + sum(PreventedNewInfectionsB.DirectProtVacc6[i,1:n.grid])*DALY.per.infection.B[i] 
+
+DeltaDirectDALYvacc7[i]<-sum(PreventedNewInfectionsAH1.DirectProtVacc7[i,1:n.grid])*DALY.per.infection.H1N1[i]  + sum(PreventedNewInfectionsAH3.DirectProtVacc7[i,1:n.grid])*DALY.per.infection.H3N2[i] + sum(PreventedNewInfectionsB.DirectProtVacc7[i,1:n.grid])*DALY.per.infection.B[i] 
+
+}
+
+
+TotalDeath.novacc<-sum(death.novacc[1:6])
+TotalDeath.vacc1<-sum(death.vacc1[1:6])
+TotalDeath.vacc2<-sum(death.vacc2[1:6])
+TotalDeath.vacc3<-sum(death.vacc3[1:6])
+TotalDeath.vacc4<-sum(death.vacc4[1:6])
+TotalDeath.vacc5<-sum(death.vacc5[1:6])
+TotalDeath.vacc6<-sum(death.vacc6[1:6])
+TotalDeath.vacc7<-sum(death.vacc7[1:6])
+
+TotalDeath.averted1<-sum(deaths.averted.vacc1[1:6])
+TotalDeath.averted2<-sum(deaths.averted.vacc2[1:6])
+TotalDeath.averted3<-sum(deaths.averted.vacc3[1:6])
+TotalDeath.averted4<-sum(deaths.averted.vacc4[1:6])
+TotalDeath.averted5<-sum(deaths.averted.vacc5[1:6])
+TotalDeath.averted6<-sum(deaths.averted.vacc6[1:6])
+TotalDeath.averted7<-sum(deaths.averted.vacc7[1:6])
+
+TotalIPD.novacc<-sum(IPD.novacc[1:6])
+TotalIPD.vacc1<-sum(IPD.vacc1[1:6])
+TotalIPD.vacc2<-sum(IPD.vacc2[1:6])
+TotalIPD.vacc3<-sum(IPD.vacc3[1:6])
+TotalIPD.vacc4<-sum(IPD.vacc4[1:6])
+TotalIPD.vacc5<-sum(IPD.vacc5[1:6])
+TotalIPD.vacc6<-sum(IPD.vacc6[1:6])
+TotalIPD.vacc7<-sum(IPD.vacc7[1:6])
+
+
+TotalOPD.novacc<-sum(OPD.novacc[1:6])
+TotalOPD.vacc1<-sum(OPD.vacc1[1:6])
+TotalOPD.vacc2<-sum(OPD.vacc2[1:6])
+TotalOPD.vacc3<-sum(OPD.vacc3[1:6])
+TotalOPD.vacc4<-sum(OPD.vacc4[1:6])
+TotalOPD.vacc5<-sum(OPD.vacc5[1:6])
+TotalOPD.vacc6<-sum(OPD.vacc6[1:6])
+TotalOPD.vacc7<-sum(OPD.vacc7[1:6])
+
+
+TotalIPD.averted1<-sum(IPD.averted.vacc1[1:6])
+TotalIPD.averted2<-sum(IPD.averted.vacc2[1:6])
+TotalIPD.averted3<-sum(IPD.averted.vacc3[1:6])
+TotalIPD.averted4<-sum(IPD.averted.vacc4[1:6])
+TotalIPD.averted5<-sum(IPD.averted.vacc5[1:6])
+TotalIPD.averted6<-sum(IPD.averted.vacc6[1:6])
+TotalIPD.averted7<-sum(IPD.averted.vacc7[1:6])
+
+
+Totalsymptomatic.cases.averted1<-sum(symptomatic.cases.averted.vacc1[1:6])
+Totalsymptomatic.cases.averted2<-sum(symptomatic.cases.averted.vacc2[1:6])
+Totalsymptomatic.cases.averted3<-sum(symptomatic.cases.averted.vacc3[1:6])
+Totalsymptomatic.cases.averted4<-sum(symptomatic.cases.averted.vacc4[1:6])
+Totalsymptomatic.cases.averted5<-sum(symptomatic.cases.averted.vacc5[1:6])
+Totalsymptomatic.cases.averted6<-sum(symptomatic.cases.averted.vacc6[1:6])
+Totalsymptomatic.cases.averted7<-sum(symptomatic.cases.averted.vacc7[1:6])
+
+#deathsin60plus<-100*death.novacc[6]/TotalDeath.novacc
+
+TotalDALY.novacc<-sum(DALY.novacc[1:6])
+TotalDALY.vacc1<-sum(DALY.vacc1[1:6]) + tot.vaccines.1 *DALYs.per.vax
+TotalDALY.vacc2<-sum(DALY.vacc2[1:6]) + tot.vaccines.2 *DALYs.per.vax
+TotalDALY.vacc3<-sum(DALY.vacc3[1:6]) + tot.vaccines.3 *DALYs.per.vax
+TotalDALY.vacc4<-sum(DALY.vacc4[1:6]) + tot.vaccines.4 *DALYs.per.vax
+TotalDALY.vacc5<-sum(DALY.vacc5[1:6]) + tot.vaccines.5 *DALYs.per.vax
+TotalDALY.vacc6<-sum(DALY.vacc6[1:6]) + tot.vaccines.6 *DALYs.per.vax
+TotalDALY.vacc7<-sum(DALY.vacc7[1:6]) + tot.vaccines.7 *DALYs.per.vax
+
+
+DeltaDALYnovacc.vacc1<-TotalDALY.novacc- TotalDALY.vacc1  # incremental health benefits
+DeltaDALYnovacc.vacc2<-TotalDALY.novacc- TotalDALY.vacc2  # incremental health benefits
+DeltaDALYnovacc.vacc3<-TotalDALY.novacc- TotalDALY.vacc3  # incremental health benefits
+DeltaDALYnovacc.vacc4<-TotalDALY.novacc- TotalDALY.vacc4  # incremental health benefits
+DeltaDALYnovacc.vacc5<-TotalDALY.novacc- TotalDALY.vacc5  # incremental health benefits
+DeltaDALYnovacc.vacc6<-TotalDALY.novacc- TotalDALY.vacc6  # incremental health benefits
+DeltaDALYnovacc.vacc7<-TotalDALY.novacc- TotalDALY.vacc7  # incremental health benefits
+
+DeltaDALYvacc1.vacc2<-TotalDALY.vacc1- TotalDALY.vacc2     # incremental health benefits
+
+
+TotalDeltaDirectDALYvacc1<-sum(DeltaDirectDALYvacc1[1:6])  # incremental health benefits due to direction protection from vacc 1
+
+TotalDeltaDirectDALYvacc2<-sum(DeltaDirectDALYvacc2[1:6])  # incremental health benefits due to direction protection from vacc 2
+
+TotalDeltaDirectDALYvacc3<-sum(DeltaDirectDALYvacc3[1:6])  # incremental health benefits due to direction protection from vacc 3
+
+TotalDeltaDirectDALYvacc4<-sum(DeltaDirectDALYvacc4[1:6])  # incremental health benefits due to direction protection from vacc 4
+
+TotalDeltaDirectDALYvacc5<-sum(DeltaDirectDALYvacc5[1:6])  # incremental health benefits due to direction protection from vacc 5
+
+TotalDeltaDirectDALYvacc6<-sum(DeltaDirectDALYvacc6[1:6])  # incremental health benefits due to direction protection from vacc 6
+
+TotalDeltaDirectDALYvacc7<-sum(DeltaDirectDALYvacc7[1:6])  # incremental health benefits due to direction protection from vacc 7
+
+# 1c. Parameters for cost outcomes
+
+# We need to include these costs per sympotmatic cases if doing analysis from societal persepective. This includes costs of parents going to hospital to vaccinate children. 
+
+
+# Use gamma distributions as we can only have positive costs
+
+cost.per.symptomatic[1]~dgamma(208.2, 10.3)  
+cost.per.symptomatic[2]~dgamma( 142.0, 9.9) 
+cost.per.symptomatic[3]~dgamma(86.7, 3.2)  # mean=27, var=8.4
+cost.per.symptomatic[4]~dgamma(110.25, 26.25 )   # mean =4.2 var = 0.16
+cost.per.symptomatic[5]~dgamma(110.25, 26.25 ) 
+cost.per.symptomatic[6]~dgamma(110.25, 26.25 ) 
+
+
+# Direct med costs of OPD visit
+cILI.OP.0to2~dgamma(23.3, 0.062)  # mean =373, var = 5991
+cILI.OP.2to5~dgamma(23.6, 0.063)  # mean =374, var = 5914
+cILI.OP.6to11~dgamma(23.35, 0.063) # mean =373, var = 5944
+cILI.OP.12to17~dgamma(23.29, 0.063)  # mean =373, var = 5960
+cILI.OP.18to59~dgamma(23.66,0.064 ) # mean =373, var =5868
+cILI.OP.60plus~dgamma(23.47, 0.063) # mean =373, var =5929
+
+# Direct nonmed costs of OPD visit
+cDNM.ILI.OP.0to2~dgamma(499.3, 3.66) #mean=136.3, var=37.21
+cDNM.ILI.OP.2to5~dgamma(516.05, 3.79 ) #mean=136.3, var=6
+cDNM.ILI.OP.6to11<-cDNM.ILI.OP.2to5
+cDNM.ILI.OP.12to17<-cDNM.ILI.OP.2to5
+cDNM.ILI.OP.18to59<-cDNM.ILI.OP.2to5
+cDNM.ILI.OP.60plus<-cDNM.ILI.OP.0to2
+
+# time costs of OPD visit
+
+cTimeILI.OP.0to2~dgamma( 1.71, 0.0007) #mean=2442, var=3492787
+cTimeILI.OP.2to5~dgamma(1.68,  0.00069 ) #mean= 2430, var=3522754
+cTimeILI.OP.6to11~dgamma(1.64, .00067) #mean=2428, var=3597472
+cTimeILI.OP.12to17~dgamma(1.72, .0007  ) #mean=2461 ,var=3517125
+cTimeILI.OP.18to59~dgamma(3.08, 0.0018 ) #mean=1668,var=902120
+cTimeILI.OP.60plus~dgamma(3.20,0.0019 ) #mean=1660,var=859885
+
+cost.per.OPD[1]<-cILI.OP.0to2 + cDNM.ILI.OP.0to2 + cTimeILI.OP.0to2
+cost.per.OPD[2]<-cILI.OP.2to5 + cDNM.ILI.OP.2to5 + cTimeILI.OP.2to5
+cost.per.OPD[3]<-cILI.OP.6to11 + cDNM.ILI.OP.6to11 + cTimeILI.OP.6to11
+cost.per.OPD[4]<-cILI.OP.12to17 + cDNM.ILI.OP.12to17 + cTimeILI.OP.12to17
+cost.per.OPD[5]<-cILI.OP.18to59 + cDNM.ILI.OP.18to59 + cTimeILI.OP.18to59
+cost.per.OPD[6]<-cILI.OP.60plus + cDNM.ILI.OP.60plus + cTimeILI.OP.60plus
+
+# Direct med costs of IPD visit
+cILI.IP.0to2~dgamma(35.58, .0048)  # mean =7448, var =1559144
+cILI.IP.2to5~dgamma(345.97, 0.049)  # mean =7122, var = 146608 
+cILI.IP.6to11~dgamma( 35.58,0.0055) # mean =6466, var = 1175025
+cILI.IP.12to17~dgamma(872.02, .18)  # mean =4756, var = 25937
+cILI.IP.18to59~dgamma( 809.47,.060) # mean =13563, var =227241
+cILI.IP.60plus~dgamma(67.47, .0076) # mean =8923, var =1180176
+
+# Direct nonmed costs of IPD visit
+cDNM.ILI.IP.0to2~dgamma(151.6, .14) #mean=1081, 7713
+cDNM.ILI.IP.2to5~dgamma( 290.9, .26)  #mean=1101, var=4168
+cDNM.ILI.IP.6to11~dgamma( 283.4 , .29) #mean=980, var=3389
+cDNM.ILI.IP.12to17~dgamma( 408.7 ,.45) #mean=913, var=2039
+cDNM.ILI.IP.18to59~dgamma( 448.8 ,.51) #mean=872, var=1693
+cDNM.ILI.IP.60plus~dgamma(  296.9, .27) #mean=1102, var=4092
+
+# time costs of IPD visit
+
+cTimeILI.IP.0to2~dgamma(488.1,  .1) #mean=4776, var=46729
+cTimeILI.IP.2to5~dgamma( 1821.4 , .38)  #mean=4834 , var=12830
+cTimeILI.IP.6to11~dgamma(1690.2,  .38) #mean=4470, var=11822
+cTimeILI.IP.12to17~dgamma( 9577.6, 2.24) #mean= 4269,var=1903
+cTimeILI.IP.18to59~dgamma(25961.8, 6.26) #mean=4144,var=662
+cTimeILI.IP.60plus~dgamma( 1938.0, .4) #mean=4839,var=12083
+
+cost.per.IPD[1]<-cILI.IP.0to2 + cDNM.ILI.IP.0to2 + cTimeILI.IP.0to2
+cost.per.IPD[2]<-cILI.IP.2to5 + cDNM.ILI.IP.2to5 + cTimeILI.IP.2to5
+cost.per.IPD[3]<-cILI.IP.6to11 + cDNM.ILI.IP.6to11 + cTimeILI.IP.6to11
+cost.per.IPD[4]<-cILI.IP.12to17 + cDNM.ILI.IP.12to17 + cTimeILI.IP.12to17
+cost.per.IPD[5]<-cILI.IP.18to59 + cDNM.ILI.IP.18to59 + cTimeILI.IP.18to59
+cost.per.IPD[6]<-cILI.IP.60plus + cDNM.ILI.IP.60plus + cTimeILI.IP.60plus
+
+
+cost.per.death[1]<-0
+cost.per.death[2]<-0
+cost.per.death[3]<-0
+cost.per.death[4]<-0
+cost.per.death[5]<-0
+cost.per.death[6]<-0
+
+# 1d. Calculate costs
+
+# We need to work out what proportion of vaccinations are one dose and what proportion two doses.
+# Two doses are required for those under 9 who were not vaccinated the previous season.
+# Assume that children miss annual vaccines randomly with prob (1-VaxCoverage[i]) for age group i.
+# This is a conservative assumption in that it will tend to overestimat the number of children requiring two doses in each age group if children who miss a vaccination one year are mrore likely to miss it the next.
+
+prob.getting.2doses.if.vaccinated.2to5<-0.25 + 0.75*(1-VaxCoverage[2])  
+# in above, 0.25 is prob aged 2 to 3 (so no prev. vaccine) and (1-VaxCoverage[2])  is proportion age 3 to 5  not
+# vaccinated the previous year. Similarly for other age groups below.
+prob.getting.2doses.if.vaccinated.6to11<-0.5*(1-VaxCoverage[3])  #0.5 is there because half in age group are under 9 years
+meandoses.2to5<-1+prob.getting.2doses.if.vaccinated.2to5
+meandoses.6to11<-1+prob.getting.2doses.if.vaccinated.6to11
+
+
+# doses given
+vaccines.used.novax.2to5<-0
+vaccines.used.vnovax.6to11<-0
+vaccines.used.novax.12to17<-0
+vaccines.used.novax.60plus<-theta.novaxAH1[51] * (vaxstopday-vaxstartday)
+vaccines.used.vacc1.2to5<-theta.vax1AH1[47] * (vaxstopday-vaxstartday)*meandoses.2to5
+vaccines.used.vacc1.6to11<-theta.vax1AH1[48] * (vaxstopday-vaxstartday)*meandoses.6to11
+vaccines.used.vacc1.12to17<-theta.vax1AH1[49] * (vaxstopday-vaxstartday)
+vaccines.used.vacc1.60plus<-theta.vax1AH1[51] * (vaxstopday-vaxstartday)
+vaccines.used.vacc2.2to5<-theta.vax2AH1[47] * (vaxstopday-vaxstartday)*meandoses.2to5
+vaccines.used.vacc2.6to11<-theta.vax2AH1[48] * (vaxstopday-vaxstartday)*meandoses.6to11
+vaccines.used.vacc2.12to17<-theta.vax2AH1[49] * (vaxstopday-vaxstartday)
+vaccines.used.vacc2.60plus<-theta.vax2AH1[51] * (vaxstopday-vaxstartday)
+vaccines.used.vacc3.2to5<-theta.vax3AH1[47] * (vaxstopday-vaxstartday)*meandoses.2to5
+vaccines.used.vacc3.6to11<-theta.vax3AH1[48] * (vaxstopday-vaxstartday)*meandoses.6to11
+vaccines.used.vacc3.12to17<-theta.vax3AH1[49] * (vaxstopday-vaxstartday)
+vaccines.used.vacc3.60plus<-theta.vax3AH1[51] * (vaxstopday-vaxstartday)
+vaccines.used.vacc4.2to5<-theta.vax4AH1[47] * (vaxstopday-vaxstartday)*meandoses.2to5
+vaccines.used.vacc4.6to11<-theta.vax4AH1[48] * (vaxstopday-vaxstartday)*meandoses.6to11
+vaccines.used.vacc4.12to17<-theta.vax4AH1[49] * (vaxstopday-vaxstartday)
+vaccines.used.vacc4.60plus<-theta.vax4AH1[51] * (vaxstopday-vaxstartday)
+vaccines.used.vacc5.2to5<-theta.vax5AH1[47] * (vaxstopday-vaxstartday)*meandoses.2to5
+vaccines.used.vacc5.6to11<-theta.vax5AH1[48] * (vaxstopday-vaxstartday)*meandoses.6to11
+vaccines.used.vacc5.12to17<-theta.vax5AH1[49] * (vaxstopday-vaxstartday)
+vaccines.used.vacc5.60plus<-theta.vax5AH1[51] * (vaxstopday-vaxstartday)
+vaccines.used.vacc6.2to5<-theta.vax6AH1[47] * (vaxstopday-vaxstartday)*meandoses.2to5
+vaccines.used.vacc6.6to11<-theta.vax6AH1[48] * (vaxstopday-vaxstartday)*meandoses.6to11
+vaccines.used.vacc6.12to17<-theta.vax6AH1[49] * (vaxstopday-vaxstartday)
+vaccines.used.vacc6.60plus<-theta.vax6AH1[51] * (vaxstopday-vaxstartday)
+
+# with policy 7 we only use vaccine in 60plus 
+
+vaccines.used.vacc7.2to5<-0
+vaccines.used.vacc7.6to11<-0
+vaccines.used.vacc7.12to17<-0
+vaccines.used.vacc7.60plus<-theta.vax7AH1[51] * (vaxstopday-vaxstartday)
+tot.vaccines.0<-vaccines.used.novax.60plus
+tot.vaccines.1<-vaccines.used.vacc1.2to5 + vaccines.used.vacc1.6to11 +vaccines.used.vacc1.12to17+vaccines.used.vacc1.60plus
+tot.vaccines.2<-vaccines.used.vacc2.2to5 + vaccines.used.vacc2.6to11 +vaccines.used.vacc2.12to17+vaccines.used.vacc2.60plus
+tot.vaccines.3<-vaccines.used.vacc3.2to5 + vaccines.used.vacc3.6to11 +vaccines.used.vacc3.12to17+vaccines.used.vacc3.60plus
+tot.vaccines.4<-vaccines.used.vacc4.2to5 + vaccines.used.vacc4.6to11 +vaccines.used.vacc4.12to17+vaccines.used.vacc4.60plus
+tot.vaccines.5<-vaccines.used.vacc5.2to5 + vaccines.used.vacc5.6to11 +vaccines.used.vacc5.12to17+vaccines.used.vacc5.60plus
+tot.vaccines.6<-vaccines.used.vacc6.2to5 + vaccines.used.vacc6.6to11 +vaccines.used.vacc6.12to17+vaccines.used.vacc6.60plus
+tot.vaccines.7<- vaccines.used.vacc7.60plus
+
+
+# vaccine costs in Thai Baht per dose (from table 3 of report)
+#manufacturing
+cTIV.2to5<-201
+cTIV.6to11<-201
+cTIV.12to17<-201
+cTIV.60plus<-201
+
+cLAIV.2to5<-322
+cLAIV.6to11<-322
+cLAIV.12to17<-322
+
+
+#logistics (see table 3 WHO report)
+cVacLog.2to5~dgamma( 26.298, 1.421)  #mean=18.5, 95% (CIs 12.1,26.2
+cVacLog.6to11~dgamma( 26.298, 1.421)  #mean=18.5, 95% (CIs 12.1,26.2
+cVacLog.12to17~dgamma( 26.298, 1.421)  #mean=18.5, 95% (CIs 12.1,26.2)
+cVacLog.60plus~dgamma( 26.298, 1.421)  #mean=18.5, 95% (CIs 12.1,26.2)
+
+# administration costs per dose (see table 3 of submitted report)
+cVacAdmin.2to5 ~dgamma( 44.74, .382)  #mean=117.1 , 95% CIs (85.3,153.8)
+cVacAdmin.6to11 ~dgamma( 1,.0149 )  #mean= 67, 95% CIs (1.7,247.6)
+cVacAdmin.12to17 ~dgamma( 1,.0149 )  #mean= 67, 95% CIs (1.7,247.2)
+cVacAdmin.60plus ~dgamma( 44.74, .382)  #mean=117.1 , 95% CIs (85.3,153.8)
+
+
+#Adverse event costs per dose
+cAETIV.2to5~dgamma(1.941 , 3.70) # mean =0.524, var = .376 
+cAETIV.6to11~dgamma( 1.296, 3.97) # mean =.326, var =  .287	
+cAETIV.12to17~dgamma( 1.217, 13.733) # mean =.089, var = .08
+cAETIV.60plus~dgamma( 1.217, 13.733) # mean =.089, var = .08
+
+cAELAIV.2to5~dgamma(1.941 , 3.70) # mean =0.524, var = .376 
+cAELAIV.6to11~dgamma( 1.296, 3.97) # mean =.326, var =  .287	
+cAELAIV.12to17~dgamma( 1.217, 13.733) # mean =.089, var = .08
+
+
+# Direct non-med costs of vaccine administration (preschool only)
+cDNMVac.2to5~dgamma(494.16, 1.81) #mean=272.76, var=150.6
+cDNMVac.6to11<-0
+cDNMVac.12to17<-0
+
+# AE related direct non-medical costs
+cDNMVacAE.2to5~dgamma(3.48, 2.51 )  #mean=1.385, se=0.742
+cDNMVacAE.6to11~dgamma(1.47, 2.147 )  #mean=0.685, se=0.565
+cDNMVacAE.12to17~dgamma(1.187, 2.675 )  #mean=0.444, se=0.407
+cDNMVacAE.60plus~dgamma(1.187, 2.675 )  #mean=0.444, se=0.407
+
+#time costs from vaccine administation
+cTimeVac.2to5~dgamma(14.198  , .471) #mean =30.172  se=  8.007
+cTimeVac.6to11~dgamma(  14.08, 1.858) #mean =7.58  se= 2.02
+cTimeVac.12to17~dgamma(  13.94, 1.838) #mean = 7.6 se= 2.03
+cTimeVac.60plus~dgamma(14.198  , .471) #mean =30.172  se=  8.007
+
+#AE related fime from seeking tx
+
+cTimeVacAE.2to5~dgamma( 2.652 ,8.595 ) #mean = .309 se= .189
+cTimeVacAE.6to11~dgamma( 1.241 ,8.031 ) #mean = .154 se= .139
+cTimeVacAE.12to17~dgamma(  1.036, 10.214) #mean = .101  se=.1 
+cTimeVacAE.60plus~dgamma(  1.036, 10.214) #mean = .101  se=.1 
+
+cost.per.vacc1.2to5<-cTIV.2to5+cVacLog.2to5+cVacAdmin.2to5+cAETIV.2to5+cDNMVac.2to5+cDNMVacAE.2to5+cTimeVac.2to5+cTimeVacAE.2to5
+
+cost.per.vacc1.6to11<-cTIV.6to11+cVacLog.6to11+cVacAdmin.6to11+cAETIV.6to11+cDNMVacAE.6to11+cTimeVac.6to11+cTimeVacAE.6to11
+
+cost.per.vacc1.12to17<-cTIV.12to17+cVacLog.12to17+cVacAdmin.12to17+cAETIV.12to17+cDNMVacAE.12to17+cTimeVac.12to17+cTimeVacAE.12to17
+
+cost.per.vacc1.60plus<-cTIV.60plus+cVacLog.60plus+cVacAdmin.60plus +cAETIV.60plus+cDNMVacAE.60plus+cTimeVac.60plus+cTimeVacAE.60plus
+
+cost.per.vacc2.2to5<-cLAIV.2to5+cVacLog.2to5+cVacAdmin.2to5+cAELAIV.2to5+cDNMVac.2to5+cDNMVacAE.2to5+cTimeVac.2to5+cTimeVacAE.2to5
+
+cost.per.vacc2.6to11<-cLAIV.6to11+cVacLog.6to11+cVacAdmin.6to11+cAELAIV.6to11+cDNMVacAE.6to11+cTimeVac.6to11+cTimeVacAE.6to11
+
+cost.per.vacc2.12to17<-cLAIV.12to17+cVacLog.12to17+cVacAdmin.12to17+cAELAIV.12to17+cDNMVacAE.12to17+cTimeVac.12to17+cTimeVacAE.12to17
+
+cost.per.vacc2.60plus<-cost.per.vacc1.60plus
+
+cost.per.vacc3.2to5<-cost.per.vacc2.2to5
+cost.per.vacc3.6to11<-cost.per.vacc2.6to11
+cost.per.vacc3.12to17<-cost.per.vacc2.12to17
+cost.per.vacc3.60plus<-cost.per.vacc1.60plus
+
+cost.per.vacc4.2to5<-cost.per.vacc2.2to5
+cost.per.vacc4.6to11<-cost.per.vacc2.6to11
+cost.per.vacc4.12to17<-cost.per.vacc2.12to17
+cost.per.vacc4.60plus<-cost.per.vacc1.60plus
+
+cost.per.vacc5.2to5<-cost.per.vacc2.2to5
+cost.per.vacc5.6to11<-cost.per.vacc2.6to11
+cost.per.vacc5.12to17<-cost.per.vacc2.12to17
+cost.per.vacc5.60plus<-cost.per.vacc1.60plus
+
+cost.per.vacc6.2to5<-cost.per.vacc2.2to5
+cost.per.vacc6.6to11<-cost.per.vacc2.6to11
+cost.per.vacc6.12to17<-cost.per.vacc2.12to17
+cost.per.vacc6.60plus<-cost.per.vacc1.60plus
+
+cost.per.vacc7.2to5<-cost.per.vacc2.2to5
+cost.per.vacc7.6to11<-cost.per.vacc2.6to11
+cost.per.vacc7.12to17<-cost.per.vacc2.12to17
+cost.per.vacc7.60plus<-cost.per.vacc1.60plus
+
+vaccine.cost0<-cost.per.vacc1.60plus*vaccines.used.novax.60plus
+
+vaccine.cost1<-cost.per.vacc1.2to5*vaccines.used.vacc1.2to5 +cost.per.vacc1.6to11*vaccines.used.vacc1.6to11+cost.per.vacc1.12to17*vaccines.used.vacc1.12to17+cost.per.vacc1.60plus*vaccines.used.vacc1.60plus
+
+vaccine.cost2<-cost.per.vacc2.2to5*vaccines.used.vacc2.2to5 +cost.per.vacc2.6to11*vaccines.used.vacc2.6to11+cost.per.vacc2.12to17*vaccines.used.vacc2.12to17+cost.per.vacc2.60plus*vaccines.used.vacc2.60plus
+
+vaccine.cost3<-cost.per.vacc3.2to5*vaccines.used.vacc3.2to5 +cost.per.vacc3.6to11*vaccines.used.vacc3.6to11+cost.per.vacc3.12to17*vaccines.used.vacc3.12to17+cost.per.vacc3.60plus*vaccines.used.vacc3.60plus
+
+vaccine.cost4<-cost.per.vacc4.2to5*vaccines.used.vacc4.2to5 +cost.per.vacc4.6to11*vaccines.used.vacc4.6to11+cost.per.vacc4.12to17*vaccines.used.vacc4.12to17+cost.per.vacc4.60plus*vaccines.used.vacc4.60plus
+
+vaccine.cost5<-cost.per.vacc5.2to5*vaccines.used.vacc5.2to5 +cost.per.vacc5.6to11*vaccines.used.vacc5.6to11+cost.per.vacc5.12to17*vaccines.used.vacc5.12to17+cost.per.vacc5.60plus*vaccines.used.vacc5.60plus
+
+vaccine.cost6<-cost.per.vacc6.2to5*vaccines.used.vacc6.2to5 +cost.per.vacc6.6to11*vaccines.used.vacc6.6to11+cost.per.vacc6.12to17*vaccines.used.vacc6.12to17+cost.per.vacc6.60plus*vaccines.used.vacc6.60plus
+
+vaccine.cost7<-cost.per.vacc7.2to5*vaccines.used.vacc7.2to5 +cost.per.vacc7.6to11*vaccines.used.vacc7.6to11+cost.per.vacc7.12to17*vaccines.used.vacc7.12to17+cost.per.vacc7.60plus*vaccines.used.vacc7.60plus
+
+for(i in 1:6){ 
+   cost.novacc[i]<-symptomatic.novacc[i]*cost.per.symptomatic[i]+  OPD.novacc[i]*cost.per.OPD[i] +     IPD.novacc[i]*cost.per.IPD[i] +  death.novacc[i]*cost.per.death[i]
+
+   cost.vacc1[i]<-symptomatic.vacc1[i]*cost.per.symptomatic[i]+  OPD.vacc1[i]*cost.per.OPD[i] +     IPD.vacc1[i]*cost.per.IPD[i] +  death.vacc1[i]*cost.per.death[i]
+
+  cost.vacc2[i]<-symptomatic.vacc2[i]*cost.per.symptomatic[i]+  OPD.vacc2[i]*cost.per.OPD[i] +     IPD.vacc2[i]*cost.per.IPD[i] +  death.vacc2[i]*cost.per.death[i]
+
+  cost.vacc3[i]<-symptomatic.vacc3[i]*cost.per.symptomatic[i]+  OPD.vacc3[i]*cost.per.OPD[i] +     IPD.vacc3[i]*cost.per.IPD[i] +  death.vacc3[i]*cost.per.death[i]
+
+ cost.vacc4[i]<-symptomatic.vacc4[i]*cost.per.symptomatic[i]+  OPD.vacc4[i]*cost.per.OPD[i] +     IPD.vacc4[i]*cost.per.IPD[i] +  death.vacc4[i]*cost.per.death[i]
+
+ cost.vacc5[i]<-symptomatic.vacc5[i]*cost.per.symptomatic[i]+  OPD.vacc5[i]*cost.per.OPD[i] +     IPD.vacc5[i]*cost.per.IPD[i] +  death.vacc5[i]*cost.per.death[i]
+
+ cost.vacc6[i]<-symptomatic.vacc6[i]*cost.per.symptomatic[i]+  OPD.vacc6[i]*cost.per.OPD[i] +     IPD.vacc6[i]*cost.per.IPD[i] +  death.vacc6[i]*cost.per.death[i]
+
+cost.vacc7[i]<-symptomatic.vacc7[i]*cost.per.symptomatic[i]+  OPD.vacc7[i]*cost.per.OPD[i] +     IPD.vacc7[i]*cost.per.IPD[i] +  death.vacc7[i]*cost.per.death[i]
+
+}
+Totalcost.novacc<-sum(cost.novacc[1:6])+ vaccine.cost0
+Totalcost.vacc1<-sum(cost.vacc1[1:6]) + vaccine.cost1
+Totalcost.vacc2<-sum(cost.vacc2[1:6]) + vaccine.cost2
+Totalcost.vacc3<-sum(cost.vacc3[1:6]) + vaccine.cost3
+Totalcost.vacc4<-sum(cost.vacc4[1:6]) + vaccine.cost4
+Totalcost.vacc5<-sum(cost.vacc5[1:6]) + vaccine.cost5
+Totalcost.vacc6<-sum(cost.vacc6[1:6]) + vaccine.cost6
+Totalcost.vacc7<-sum(cost.vacc7[1:6]) + vaccine.cost7
+Deltacostnovacc.vacc1<-Totalcost.vacc1 - Totalcost.novacc  # incremental health costs
+Deltacostnovacc.vacc2<-Totalcost.vacc2 - Totalcost.novacc  # incremental health costs
+Deltacostnovacc.vacc3<-Totalcost.vacc3 - Totalcost.novacc  # incremental health costs
+Deltacostnovacc.vacc4<-Totalcost.vacc4 - Totalcost.novacc  # incremental health costs
+Deltacostnovacc.vacc5<-Totalcost.vacc5 - Totalcost.novacc  # incremental health costs
+Deltacostnovacc.vacc6<-Totalcost.vacc6 - Totalcost.novacc  # incremental health costs
+Deltacostnovacc.vacc7<-Totalcost.vacc7 - Totalcost.novacc  # incremental health costs
+Deltacostvacc1.vacc2<-Totalcost.vacc2- Totalcost.vacc1       # incremental health costs
+
+# 1e. ICERS, CEACS etc
+
+#Note #ICER= E[Ic ]/E[Is ], ratio of posterior means (not E[r ] = E[Ic /Is ])
+#so we calc ICER dividing means in output rather than for each iteration
+
+for(j in 1:51){
+   wtp[j]<- (j-1)*10000  # willingness to pay per DALY, from 0 to 500,000 Thai Baht
+
+   INBnovacc.vacc1[j]<-wtp[j]*DeltaDALYnovacc.vacc1 - Deltacostnovacc.vacc1  #  Incemental Net Benefit (same as Net Monetary Benefit)
+   INBnovacc.vacc2[j]<-wtp[j]*DeltaDALYnovacc.vacc2 - Deltacostnovacc.vacc2     
+   INBnovacc.vacc3[j]<-wtp[j]*DeltaDALYnovacc.vacc3 - Deltacostnovacc.vacc3  
+   INBnovacc.vacc4[j]<-wtp[j]*DeltaDALYnovacc.vacc4 - Deltacostnovacc.vacc4     
+   INBnovacc.vacc5[j]<-wtp[j]*DeltaDALYnovacc.vacc5 - Deltacostnovacc.vacc5     
+   INBnovacc.vacc6[j]<-wtp[j]*DeltaDALYnovacc.vacc6 - Deltacostnovacc.vacc6            
+   INBnovacc.vacc7[j]<-wtp[j]*DeltaDALYnovacc.vacc7 - Deltacostnovacc.vacc7    
+   
+   INBs[1,j]<-INBnovacc.vacc1[j]
+   INBs[2,j]<-INBnovacc.vacc2[j]
+   INBs[3,j]<-INBnovacc.vacc3[j]
+   INBs[4,j]<-INBnovacc.vacc4[j]
+   INBs[5,j]<-INBnovacc.vacc5[j]
+   INBs[6,j]<-INBnovacc.vacc6[j]
+   INBs[7,j]<-INBnovacc.vacc7[j]
+   allINBsnegative[j]<-step(-INBs[1,j]) *step(-INBs[2,j]) *step(-INBs[3,j])   *step(-INBs[4,j]) *step(-INBs[5,j]) *step(-INBs[6,j]) *step(-INBs[7,j]) 
+  # policy.with.highest.nmb[j]<-ranked(INBs[1:6 ,j],6) * (1-allINBsnegative[j])
+ policy.with.highest.nmb[j]<-ranked(INBs[1:4 ,j],6) * (1-allINBsnegative[j])
+
+
+}
+
+
+# ****************************************************************************************************************************
+# 2. Likelihood
+
+
+
+for(j in 1:12){   # likelihood of monthly data
+  month[j]<-j
+   # assume a 1 in 100 chance of testing flu pos even if no flu [this avoids problems with 0 probabilities]
+   probposAH1[j]<-max(0.01,expected.proportion.fluAH1.pos.monthly[j])
+   probposAH3[j]<-max(0.01,expected.proportion.fluAH3.pos.monthly[j])
+   probposB[j]<-max(0.01,expected.proportion.fluB.pos.monthly[j])
+   fluApos.monthly[j]<-fluAH3posbymonth[j] + fluAH1posbymonth[j] 
+   Expected.fluAH1pos.monthly[j]<-probposAH1[j]*Numtestedbymonth[j]
+   Expected.fluAH3pos.monthly[j]<-probposAH3[j]*Numtestedbymonth[j]  
+   Expected.fluBpos.monthly[j]<-probposB[j]*Numtestedbymonth[j]
+   fluAH1data[j]<-fluAH1posbymonth[j]  # use this for comparing fits of model to data
+   fluAH3data[j]<-fluAH3posbymonth[j]  # use this for comparing fits of model to data
+   fluBdata[j]<-fluBposbymonth[j]  # use this for comparing fits of model to data
+   # Calculate multinomial probabilities
+   mprobs[j,1]<- 1- probposAH1[j] -probposAH3[j] -probposB[j] 
+   mprobs[j,2]<-probposAH1[j]
+   mprobs[j,3]<-probposAH3[j]
+   mprobs[j,4]<-probposB[j]
+   virusmultinomdata[j,1:4] ~dmulti(mprobs[j,1:4] ,Numtestedbymonth[j])
+}
+
+# 3. Calculate epidemiological outcomes from the model 
+
+Ntotal<-sum(N[1:n.age])
+
+for(i in 1:n.grid) {
+	  index[i] <- i  
+	  time[i]<-i
+            NewInfectionsTotAH1[i]<-sum(NewInfectionsAH1[1:n.age,i])
+            NewInfectionsTotAH3[i]<-sum(NewInfectionsAH3[1:n.age,i])
+            NewInfectionsTotB[i]<-sum(NewInfectionsB[1:n.age,i])
+            #NewInfections  holds the total number of new infections (over all age groups) at each of n.grid time points		
+}
+
+for(j in 2:n.grid){
+ CumInfectionsAH1[1,j]<- solution0.AH1[j,6] 
+ CumInfectionsAH1[2,j]<- solution0.AH1[j,13] 
+ CumInfectionsAH1[3,j]<- solution0.AH1[j,20] 
+ CumInfectionsAH1[4,j]<- solution0.AH1[j,27] 
+ CumInfectionsAH1[5,j]<- solution0.AH1[j,34] 
+ CumInfectionsAH1[6,j]<- solution0.AH1[j,41] 
+
+ CumInfectionsAH3[1,j]<- solution0.AH3[j,6] 
+ CumInfectionsAH3[2,j]<- solution0.AH3[j,13] 
+ CumInfectionsAH3[3,j]<- solution0.AH3[j,20] 
+ CumInfectionsAH3[4,j]<- solution0.AH3[j,27] 
+ CumInfectionsAH3[5,j]<- solution0.AH3[j,34] 
+ CumInfectionsAH3[6,j]<- solution0.AH3[j,41] 
+
+ CumInfectionsB[1,j]<- solution0.B[j,6] 
+ CumInfectionsB[2,j]<- solution0.B[j,13] 
+ CumInfectionsB[3,j]<- solution0.B[j,20] 
+ CumInfectionsB[4,j]<- solution0.B[j,27] 
+ CumInfectionsB[5,j]<- solution0.B[j,34] 
+ CumInfectionsB[6,j]<- solution0.B[j,41] 
+
+ CumInfectionsAH1vacc1[1,j]<-   solutionV1.AH1[j,6] 
+ CumInfectionsAH1vacc1[2,j]<-   solutionV1.AH1[j,13] 
+ CumInfectionsAH1vacc1[3,j]<-   solutionV1.AH1[j,20] 
+ CumInfectionsAH1vacc1[4,j]<-   solutionV1.AH1[j,27] 
+ CumInfectionsAH1vacc1[5,j]<-   solutionV1.AH1[j,34] 
+ CumInfectionsAH1vacc1[6,j]<-   solutionV1.AH1[j,41] 
+
+ CumInfectionsAH3vacc1[1,j]<-   solutionV1.AH3[j,6] 
+ CumInfectionsAH3vacc1[2,j]<-   solutionV1.AH3[j,13] 
+ CumInfectionsAH3vacc1[3,j]<-   solutionV1.AH3[j,20] 
+ CumInfectionsAH3vacc1[4,j]<-   solutionV1.AH3[j,27] 
+ CumInfectionsAH3vacc1[5,j]<-   solutionV1.AH3[j,34]
+ CumInfectionsAH3vacc1[6,j]<-   solutionV1.AH3[j,41]
+
+ CumInfectionsBvacc1[1,j]<-   solutionV1.B[j,6] 
+ CumInfectionsBvacc1[2,j]<-   solutionV1.B[j,13] 
+ CumInfectionsBvacc1[3,j]<-   solutionV1.B[j,20] 
+ CumInfectionsBvacc1[4,j]<-   solutionV1.B[j,27] 
+ CumInfectionsBvacc1[5,j]<-   solutionV1.B[j,34] 
+ CumInfectionsBvacc1[6,j]<-   solutionV1.B[j,41] 
+
+ CumInfectionsAH1vacc2[1,j]<-  solutionV2.AH1[j,6] 
+ CumInfectionsAH1vacc2[2,j]<-  solutionV2.AH1[j,13] 
+ CumInfectionsAH1vacc2[3,j]<-  solutionV2.AH1[j,20] 
+ CumInfectionsAH1vacc2[4,j]<-  solutionV2.AH1[j,27] 
+ CumInfectionsAH1vacc2[5,j]<-  solutionV2.AH1[j,34] 
+ CumInfectionsAH1vacc2[6,j]<-  solutionV2.AH1[j,41] 
+
+ CumInfectionsAH3vacc2[1,j]<-  solutionV2.AH3[j,6] 
+ CumInfectionsAH3vacc2[2,j]<-  solutionV2.AH3[j,13] 
+ CumInfectionsAH3vacc2[3,j]<-  solutionV2.AH3[j,20] 
+ CumInfectionsAH3vacc2[4,j]<-  solutionV2.AH3[j,27] 
+ CumInfectionsAH3vacc2[5,j]<-  solutionV2.AH3[j,34] 
+ CumInfectionsAH3vacc2[6,j]<-  solutionV2.AH3[j,41] 
+
+ CumInfectionsBvacc2[1,j]<-  solutionV2.B[j,6] 
+ CumInfectionsBvacc2[2,j]<-  solutionV2.B[j,13] 
+ CumInfectionsBvacc2[3,j]<-  solutionV2.B[j,20] 
+ CumInfectionsBvacc2[4,j]<-  solutionV2.B[j,27] 
+ CumInfectionsBvacc2[5,j]<-  solutionV2.B[j,34] 
+ CumInfectionsBvacc2[6,j]<-  solutionV2.B[j,41] 
+
+ CumInfectionsAH1vacc3[1,j]<-  solutionV3.AH1[j,6] 
+ CumInfectionsAH1vacc3[2,j]<-  solutionV3.AH1[j,13] 
+ CumInfectionsAH1vacc3[3,j]<-  solutionV3.AH1[j,20] 
+ CumInfectionsAH1vacc3[4,j]<-  solutionV3.AH1[j,27] 
+ CumInfectionsAH1vacc3[5,j]<-  solutionV3.AH1[j,34] 
+ CumInfectionsAH1vacc3[6,j]<-  solutionV3.AH1[j,41] 
+
+ CumInfectionsAH3vacc3[1,j]<-  solutionV3.AH3[j,6] 
+ CumInfectionsAH3vacc3[2,j]<-  solutionV3.AH3[j,13] 
+ CumInfectionsAH3vacc3[3,j]<-  solutionV3.AH3[j,20] 
+ CumInfectionsAH3vacc3[4,j]<-  solutionV3.AH3[j,27] 
+ CumInfectionsAH3vacc3[5,j]<-  solutionV3.AH3[j,34] 
+ CumInfectionsAH3vacc3[6,j]<-  solutionV3.AH3[j,41] 
+
+ CumInfectionsBvacc3[1,j]<-  solutionV3.B[j,6] 
+ CumInfectionsBvacc3[2,j]<-  solutionV3.B[j,13] 
+ CumInfectionsBvacc3[3,j]<-  solutionV3.B[j,20] 
+ CumInfectionsBvacc3[4,j]<-  solutionV3.B[j,27] 
+ CumInfectionsBvacc3[5,j]<-  solutionV3.B[j,34] 
+ CumInfectionsBvacc3[6,j]<-  solutionV3.B[j,41] 
+
+ CumInfectionsAH1vacc4[1,j]<-  solutionV4.AH1[j,6] 
+ CumInfectionsAH1vacc4[2,j]<-  solutionV4.AH1[j,13] 
+ CumInfectionsAH1vacc4[3,j]<-  solutionV4.AH1[j,20] 
+ CumInfectionsAH1vacc4[4,j]<-  solutionV4.AH1[j,27] 
+ CumInfectionsAH1vacc4[5,j]<-  solutionV4.AH1[j,34] 
+ CumInfectionsAH1vacc4[6,j]<-  solutionV4.AH1[j,41] 
+
+ CumInfectionsAH3vacc4[1,j]<-  solutionV4.AH3[j,6] 
+ CumInfectionsAH3vacc4[2,j]<-  solutionV4.AH3[j,13] 
+ CumInfectionsAH3vacc4[3,j]<-  solutionV4.AH3[j,20] 
+ CumInfectionsAH3vacc4[4,j]<-  solutionV4.AH3[j,27] 
+ CumInfectionsAH3vacc4[5,j]<-  solutionV4.AH3[j,34] 
+ CumInfectionsAH3vacc4[6,j]<-  solutionV4.AH3[j,41] 
+
+ CumInfectionsBvacc4[1,j]<-  solutionV4.B[j,6] 
+ CumInfectionsBvacc4[2,j]<-  solutionV4.B[j,13] 
+ CumInfectionsBvacc4[3,j]<-  solutionV4.B[j,20] 
+ CumInfectionsBvacc4[4,j]<-  solutionV4.B[j,27] 
+ CumInfectionsBvacc4[5,j]<-  solutionV4.B[j,34] 
+ CumInfectionsBvacc4[6,j]<-  solutionV4.B[j,41] 
+
+ CumInfectionsAH1vacc5[1,j]<-  solutionV5.AH1[j,6] 
+ CumInfectionsAH1vacc5[2,j]<-  solutionV5.AH1[j,13] 
+ CumInfectionsAH1vacc5[3,j]<-  solutionV5.AH1[j,20] 
+ CumInfectionsAH1vacc5[4,j]<-  solutionV5.AH1[j,27] 
+ CumInfectionsAH1vacc5[5,j]<-  solutionV5.AH1[j,34] 
+ CumInfectionsAH1vacc5[6,j]<-  solutionV5.AH1[j,41] 
+
+ CumInfectionsAH3vacc5[1,j]<-  solutionV5.AH3[j,6] 
+ CumInfectionsAH3vacc5[2,j]<-  solutionV5.AH3[j,13] 
+ CumInfectionsAH3vacc5[3,j]<-  solutionV5.AH3[j,20] 
+ CumInfectionsAH3vacc5[4,j]<-  solutionV5.AH3[j,27] 
+ CumInfectionsAH3vacc5[5,j]<-  solutionV5.AH3[j,34] 
+ CumInfectionsAH3vacc5[6,j]<-  solutionV5.AH3[j,41] 
+
+ CumInfectionsBvacc5[1,j]<-  solutionV5.B[j,6] 
+ CumInfectionsBvacc5[2,j]<-  solutionV5.B[j,13] 
+ CumInfectionsBvacc5[3,j]<-  solutionV5.B[j,20] 
+ CumInfectionsBvacc5[4,j]<-  solutionV5.B[j,27] 
+ CumInfectionsBvacc5[5,j]<-  solutionV5.B[j,34] 
+ CumInfectionsBvacc5[6,j]<-  solutionV5.B[j,41] 
+
+
+ CumInfectionsAH1vacc6[1,j]<-  solutionV6.AH1[j,6] 
+ CumInfectionsAH1vacc6[2,j]<-  solutionV6.AH1[j,13] 
+ CumInfectionsAH1vacc6[3,j]<-  solutionV6.AH1[j,20] 
+ CumInfectionsAH1vacc6[4,j]<-  solutionV6.AH1[j,27] 
+ CumInfectionsAH1vacc6[5,j]<-  solutionV6.AH1[j,34] 
+ CumInfectionsAH1vacc6[6,j]<-  solutionV6.AH1[j,41] 
+
+ CumInfectionsAH3vacc6[1,j]<-  solutionV6.AH3[j,6] 
+ CumInfectionsAH3vacc6[2,j]<-  solutionV6.AH3[j,13] 
+ CumInfectionsAH3vacc6[3,j]<-  solutionV6.AH3[j,20] 
+ CumInfectionsAH3vacc6[4,j]<-  solutionV6.AH3[j,27] 
+ CumInfectionsAH3vacc6[5,j]<-  solutionV6.AH3[j,34] 
+ CumInfectionsAH3vacc6[6,j]<-  solutionV6.AH3[j,41] 
+
+ CumInfectionsBvacc6[1,j]<-  solutionV6.B[j,6] 
+ CumInfectionsBvacc6[2,j]<-  solutionV6.B[j,13] 
+ CumInfectionsBvacc6[3,j]<-  solutionV6.B[j,20] 
+ CumInfectionsBvacc6[4,j]<-  solutionV6.B[j,27] 
+ CumInfectionsBvacc6[5,j]<-  solutionV6.B[j,34] 
+ CumInfectionsBvacc6[6,j]<-  solutionV6.B[j,41] 
+
+ CumInfectionsAH1vacc7[1,j]<-  solutionV7.AH1[j,6] 
+ CumInfectionsAH1vacc7[2,j]<-  solutionV7.AH1[j,13] 
+ CumInfectionsAH1vacc7[3,j]<-  solutionV7.AH1[j,20] 
+ CumInfectionsAH1vacc7[4,j]<-  solutionV7.AH1[j,27] 
+ CumInfectionsAH1vacc7[5,j]<-  solutionV7.AH1[j,34] 
+ CumInfectionsAH1vacc7[6,j]<-  solutionV7.AH1[j,41] 
+
+ CumInfectionsAH3vacc7[1,j]<-  solutionV7.AH3[j,6] 
+ CumInfectionsAH3vacc7[2,j]<-  solutionV7.AH3[j,13] 
+ CumInfectionsAH3vacc7[3,j]<-  solutionV7.AH3[j,20] 
+ CumInfectionsAH3vacc7[4,j]<-  solutionV7.AH3[j,27] 
+ CumInfectionsAH3vacc7[5,j]<-  solutionV7.AH3[j,34] 
+ CumInfectionsAH3vacc7[6,j]<-  solutionV7.AH3[j,41] 
+
+ CumInfectionsBvacc7[1,j]<-  solutionV7.B[j,6] 
+ CumInfectionsBvacc7[2,j]<-  solutionV7.B[j,13] 
+ CumInfectionsBvacc7[3,j]<-  solutionV7.B[j,20] 
+ CumInfectionsBvacc7[4,j]<-  solutionV7.B[j,27] 
+ CumInfectionsBvacc7[5,j]<-  solutionV7.B[j,34] 
+ CumInfectionsBvacc7[6,j]<-  solutionV7.B[j,41] 
+
+
+# Now calculate number effectively vaccinated at each point with the 6 vaxxination policies 
+
+ vaccinated0[1,j]<-   solution0.AH1[j,7] *   theta.novaxAH1[52]
+ vaccinated0[2,j]<-   solution0.AH1[j,14] * theta.novaxAH1[53]
+ vaccinated0[3,j]<-   solution0.AH1[j,21] * theta.novaxAH1[54]
+ vaccinated0[4,j]<-   solution0.AH1[j,28] * theta.novaxAH1[55]
+ vaccinated0[5,j]<-   solution0.AH1[j,35] * theta.novaxAH1[56]
+ vaccinated0[6,j]<-   solution0.AH1[j,42] * theta.novaxAH1[57]
+
+ vaccinated1[1,j]<-   solutionV1.AH1[j,7] * theta.vax1AH1[52]
+ vaccinated1[2,j]<-   solutionV1.AH1[j,14] * theta.vax1AH1[53]
+ vaccinated1[3,j]<-   solutionV1.AH1[j,21] * theta.vax1AH1[54]
+ vaccinated1[4,j]<-   solutionV1.AH1[j,28] * theta.vax1AH1[55]
+ vaccinated1[5,j]<-   solutionV1.AH1[j,35] * theta.vax1AH1[56]
+ vaccinated1[6,j]<-   solutionV1.AH1[j,42] * theta.vax1AH1[57]
+
+ vaccinated2[1,j]<-   solutionV2.AH1[j,7] * theta.vax2AH1[52]
+ vaccinated2[2,j]<-   solutionV2.AH1[j,14] * theta.vax2AH1[53]
+ vaccinated2[3,j]<-   solutionV2.AH1[j,21] * theta.vax2AH1[54]
+ vaccinated2[4,j]<-   solutionV2.AH1[j,28] * theta.vax2AH1[55]
+ vaccinated2[5,j]<-   solutionV2.AH1[j,35] * theta.vax2AH1[56]
+ vaccinated2[6,j]<-   solutionV2.AH1[j,42] * theta.vax2AH1[57]
+
+ vaccinated3[1,j]<-   solutionV3.AH1[j,7] * theta.vax3AH1[52]
+ vaccinated3[2,j]<-   solutionV3.AH1[j,14] * theta.vax3AH1[53]
+ vaccinated3[3,j]<-   solutionV3.AH1[j,21] * theta.vax3AH1[54]
+ vaccinated3[4,j]<-   solutionV3.AH1[j,28] * theta.vax3AH1[55]
+ vaccinated3[5,j]<-   solutionV3.AH1[j,35] * theta.vax3AH1[56]
+ vaccinated3[6,j]<-   solutionV3.AH1[j,42] * theta.vax3AH1[57]
+
+ vaccinated4[1,j]<-   solutionV4.AH1[j,7] * theta.vax4AH1[52]
+ vaccinated4[2,j]<-   solutionV4.AH1[j,14] * theta.vax4AH1[53]
+ vaccinated4[3,j]<-   solutionV4.AH1[j,21] * theta.vax4AH1[54]
+ vaccinated4[4,j]<-   solutionV4.AH1[j,28] * theta.vax4AH1[55]
+ vaccinated4[5,j]<-   solutionV4.AH1[j,35] * theta.vax4AH1[56]
+ vaccinated4[6,j]<-   solutionV4.AH1[j,42] * theta.vax4AH1[57]
+
+ vaccinated5[1,j]<-   solutionV5.AH1[j,7] * theta.vax5AH1[52]
+ vaccinated5[2,j]<-   solutionV5.AH1[j,14] * theta.vax5AH1[53]
+ vaccinated5[3,j]<-   solutionV5.AH1[j,21] * theta.vax5AH1[54]
+ vaccinated5[4,j]<-   solutionV5.AH1[j,28] * theta.vax5AH1[55]
+ vaccinated5[5,j]<-   solutionV5.AH1[j,35] * theta.vax5AH1[56]
+ vaccinated5[6,j]<-   solutionV5.AH1[j,42] * theta.vax5AH1[57]
+
+ vaccinated6[1,j]<-   solutionV6.AH1[j,7] * theta.vax6AH1[52]
+ vaccinated6[2,j]<-   solutionV6.AH1[j,14] * theta.vax6AH1[53]
+ vaccinated6[3,j]<-   solutionV6.AH1[j,21] * theta.vax6AH1[54]
+ vaccinated6[4,j]<-   solutionV6.AH1[j,28] * theta.vax6AH1[55]
+ vaccinated6[5,j]<-   solutionV6.AH1[j,35] * theta.vax6AH1[56]
+ vaccinated6[6,j]<-   solutionV6.AH1[j,42] * theta.vax6AH1[57]
+
+ vaccinated7[1,j]<-   solutionV7.AH1[j,7] * theta.vax7AH1[52]
+ vaccinated7[2,j]<-   solutionV7.AH1[j,14] * theta.vax7AH1[53]
+ vaccinated7[3,j]<-   solutionV7.AH1[j,21] * theta.vax7AH1[54]
+ vaccinated7[4,j]<-   solutionV7.AH1[j,28] * theta.vax7AH1[55]
+ vaccinated7[5,j]<-   solutionV7.AH1[j,35] * theta.vax7AH1[56]
+ vaccinated7[6,j]<-   solutionV7.AH1[j,42] * theta.vax7AH1[57]
+}
+
+
+for(i in 1:6){
+ CumFluAH1InfectionsPer1000[i]<-1000*CumInfectionsAH1[i,365]/N[i]
+ CumFluAH3InfectionsPer1000[i]<-1000*CumInfectionsAH3[i,365]/N[i]
+ CumFluBInfectionsPer1000[i]<-1000*CumInfectionsB[i,365]/N[i]
+ CumFluAorBInfectionsPer1000[i]<-CumFluAH1InfectionsPer1000[i]+CumFluAH3InfectionsPer1000[i]+CumFluBInfectionsPer1000[i]
+
+ CumFluAH1InfectionsPer1000vacc1[i]<-1000*CumInfectionsAH1vacc1[i,365]/N[i]
+ CumFluAH3InfectionsPer1000vacc1[i]<-1000*CumInfectionsAH3vacc1[i,365]/N[i]
+ CumFluBInfectionsPer1000vacc1[i]<-1000*CumInfectionsBvacc1[i,365]/N[i]
+ CumFluAorBInfectionsPer1000vacc1[i]<-CumFluAH1InfectionsPer1000vacc1[i]+CumFluAH3InfectionsPer1000vacc1[i]+CumFluBInfectionsPer1000vacc1[i]
+
+ CumFluAH1InfectionsPer1000vacc2[i]<-1000*CumInfectionsAH1vacc2[i,365]/N[i]
+ CumFluAH3InfectionsPer1000vacc2[i]<-1000*CumInfectionsAH3vacc2[i,365]/N[i]
+ CumFluBInfectionsPer1000vacc2[i]<-1000*CumInfectionsBvacc2[i,365]/N[i]
+ CumFluAorBInfectionsPer1000vacc2[i]<-CumFluAH1InfectionsPer1000vacc2[i]+CumFluAH3InfectionsPer1000vacc2[i]+CumFluBInfectionsPer1000vacc2[i]
+  
+ CumFluAH1InfectionsPer1000vacc3[i]<-1000*CumInfectionsAH1vacc3[i,365]/N[i]
+ CumFluAH3InfectionsPer1000vacc3[i]<-1000*CumInfectionsAH3vacc3[i,365]/N[i]
+ CumFluBInfectionsPer1000vacc3[i]<-1000*CumInfectionsBvacc3[i,365]/N[i]
+ CumFluAorBInfectionsPer1000vacc3[i]<-CumFluAH1InfectionsPer1000vacc3[i]+CumFluAH3InfectionsPer1000vacc3[i]+CumFluBInfectionsPer1000vacc3[i]
+
+ CumFluAH1InfectionsPer1000vacc4[i]<-1000*CumInfectionsAH1vacc4[i,365]/N[i]
+ CumFluAH3InfectionsPer1000vacc4[i]<-1000*CumInfectionsAH3vacc4[i,365]/N[i]
+ CumFluBInfectionsPer1000vacc4[i]<-1000*CumInfectionsBvacc4[i,365]/N[i]
+ CumFluAorBInfectionsPer1000vacc4[i]<-CumFluAH1InfectionsPer1000vacc4[i]+CumFluAH3InfectionsPer1000vacc4[i]+CumFluBInfectionsPer1000vacc4[i]
+
+ CumFluAH1InfectionsPer1000vacc5[i]<-1000*CumInfectionsAH1vacc5[i,365]/N[i]
+ CumFluAH3InfectionsPer1000vacc5[i]<-1000*CumInfectionsAH3vacc5[i,365]/N[i]
+ CumFluBInfectionsPer1000vacc5[i]<-1000*CumInfectionsBvacc5[i,365]/N[i]
+ CumFluAorBInfectionsPer1000vacc5[i]<-CumFluAH1InfectionsPer1000vacc5[i]+CumFluAH3InfectionsPer1000vacc5[i]+CumFluBInfectionsPer1000vacc5[i]
+
+ CumFluAH1InfectionsPer1000vacc6[i]<-1000*CumInfectionsAH1vacc6[i,365]/N[i]
+ CumFluAH3InfectionsPer1000vacc6[i]<-1000*CumInfectionsAH3vacc6[i,365]/N[i]
+ CumFluBInfectionsPer1000vacc6[i]<-1000*CumInfectionsBvacc6[i,365]/N[i]
+ CumFluAorBInfectionsPer1000vacc6[i]<-CumFluAH1InfectionsPer1000vacc6[i]+CumFluAH3InfectionsPer1000vacc6[i]+CumFluBInfectionsPer1000vacc6[i]
+
+ CumFluAH1InfectionsPer1000vacc7[i]<-1000*CumInfectionsAH1vacc7[i,365]/N[i]
+ CumFluAH3InfectionsPer1000vacc7[i]<-1000*CumInfectionsAH3vacc7[i,365]/N[i]
+ CumFluBInfectionsPer1000vacc7[i]<-1000*CumInfectionsBvacc7[i,365]/N[i]
+ CumFluAorBInfectionsPer1000vacc7[i]<-CumFluAH1InfectionsPer1000vacc7[i]+CumFluAH3InfectionsPer1000vacc7[i]+CumFluBInfectionsPer1000vacc7[i]
+
+
+ AnyFluSeroAttackRate[i]<-(1- (1-CumInfectionsAH1[i,365]/N[i]) *(1-CumInfectionsAH3[i,365]/N[i]) * (1-CumInfectionsB[i,365]/N[i])) #i,e prob of getting any flu
+  NumberSeroconverting[i]<-AnyFluSeroAttackRate[i]*N[i]
+}
+
+TotalAnyFluSeroAttackRate<-sum(NumberSeroconverting[1:6])/Ntotal
+TotalAH1infectionsPer1000<-1000*sum(CumInfectionsAH1[1:6,365])/Ntotal
+TotalAH3infectionsPer1000<-1000*sum(CumInfectionsAH3[1:6,365])/Ntotal
+TotalBinfectionsPer1000<-1000*sum(CumInfectionsB[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000<-1000*(sum(CumInfectionsAH1[1:6,365])+sum(CumInfectionsAH3[1:6,365])+ sum(CumInfectionsB[1:6,365] ))/Ntotal
+#note that this is not the same as attack rate as some people will get infected with both A and B
+
+TotalAH1infectionsPer1000vacc1<-1000*sum(CumInfectionsAH1vacc1[1:6,365])/Ntotal
+TotalAH3infectionsPer1000vacc1<-1000*sum(CumInfectionsAH3vacc1[1:6,365])/Ntotal
+TotalBinfectionsPer1000vacc1<-1000*sum(CumInfectionsBvacc1[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000vacc1<-1000*(sum(CumInfectionsAH1vacc1[1:6,365])+sum(CumInfectionsAH3vacc1[1:6,365])+ sum(CumInfectionsBvacc1[1:6,365] ))/Ntotal
+
+TotalAH1infectionsPer1000vacc2<-1000*sum(CumInfectionsAH1vacc2[1:6,365])/Ntotal
+TotalAH3infectionsPer1000vacc2<-1000*sum(CumInfectionsAH3vacc2[1:6,365])/Ntotal
+TotalBinfectionsPer1000vacc2<-1000*sum(CumInfectionsBvacc2[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000vacc2<-1000*(sum(CumInfectionsAH1vacc2[1:6,365])+sum(CumInfectionsAH3vacc2[1:6,365])+ sum(CumInfectionsBvacc2[1:6,365] ))/Ntotal
+
+TotalAH1infectionsPer1000vacc3<-1000*sum(CumInfectionsAH1vacc3[1:6,365])/Ntotal
+TotalAH3infectionsPer1000vacc3<-1000*sum(CumInfectionsAH3vacc3[1:6,365])/Ntotal
+TotalBinfectionsPer1000vacc3<-1000*sum(CumInfectionsBvacc3[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000vacc3<-1000*(sum(CumInfectionsAH1vacc3[1:6,365])+sum(CumInfectionsAH3vacc3[1:6,365])+ sum(CumInfectionsBvacc3[1:6,365] ))/Ntotal
+
+TotalAH1infectionsPer1000vacc4<-1000*sum(CumInfectionsAH1vacc4[1:6,365])/Ntotal
+TotalAH3infectionsPer1000vacc4<-1000*sum(CumInfectionsAH3vacc4[1:6,365])/Ntotal
+TotalBinfectionsPer1000vacc4<-1000*sum(CumInfectionsBvacc4[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000vacc4<-1000*(sum(CumInfectionsAH1vacc4[1:6,365])+sum(CumInfectionsAH3vacc4[1:6,365])+ sum(CumInfectionsBvacc4[1:6,365] ))/Ntotal
+
+TotalAH1infectionsPer1000vacc5<-1000*sum(CumInfectionsAH1vacc5[1:6,365])/Ntotal
+TotalAH3infectionsPer1000vacc5<-1000*sum(CumInfectionsAH3vacc5[1:6,365])/Ntotal
+TotalBinfectionsPer1000vacc5<-1000*sum(CumInfectionsBvacc5[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000vacc5<-1000*(sum(CumInfectionsAH1vacc5[1:6,365])+sum(CumInfectionsAH3vacc5[1:6,365])+ sum(CumInfectionsBvacc5[1:6,365] ))/Ntotal
+
+TotalAH1infectionsPer1000vacc6<-1000*sum(CumInfectionsAH1vacc6[1:6,365])/Ntotal
+TotalAH3infectionsPer1000vacc6<-1000*sum(CumInfectionsAH3vacc6[1:6,365])/Ntotal
+TotalBinfectionsPer1000vacc6<-1000*sum(CumInfectionsBvacc6[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000vacc6<-1000*(sum(CumInfectionsAH1vacc6[1:6,365])+sum(CumInfectionsAH3vacc6[1:6,365])+ sum(CumInfectionsBvacc6[1:6,365] ))/Ntotal
+
+TotalAH1infectionsPer1000vacc7<-1000*sum(CumInfectionsAH1vacc7[1:6,365])/Ntotal
+TotalAH3infectionsPer1000vacc7<-1000*sum(CumInfectionsAH3vacc7[1:6,365])/Ntotal
+TotalBinfectionsPer1000vacc7<-1000*sum(CumInfectionsBvacc7[1:6,365])/Ntotal
+TotalAorBinfectionsPer1000vacc7<-1000*(sum(CumInfectionsAH1vacc7[1:6,365])+sum(CumInfectionsAH3vacc7[1:6,365])+ sum(CumInfectionsBvacc7[1:6,365] ))/Ntotal
+
+for(j in 1:n.grid){
+   for(i in 1:n.age) {
+    NewInfectionsAH1.tmp[i,j]<-max(NewInfectionsAH1[i,j],1)   #.tmp var is to avoid errors if binomial trials=0
+    NewInfectionsAH3.tmp[i,j]<-max(NewInfectionsAH3[i,j],1)   #.tmp var is to avoid errors if binomial trials=0
+    NewInfectionsB.tmp[i,j]<-max(NewInfectionsB[i,j],1)   #.tmp var is to avoid errors if binomial trials=0
+    ExpectedILIfluAH1infections.byage[i,j]<-prob.ILI.reportedAH1[i] * NewInfectionsAH1.tmp[i,j]
+    ExpectedILIfluAH3infections.byage[i,j]<-prob.ILI.reportedAH3[i] * NewInfectionsAH3.tmp[i,j]
+    ExpectedILIfluBinfections.byage[i,j]<-prob.ILI.reportedB[i] * NewInfectionsB.tmp[i,j]
+   }
+
+   #  virus positive data
+   #  proportion expected flu A pos is on virus testing is [test sensitivity]* E(num ILI due to flu reported)/E(total ILI reported  ) 
+
+
+   ExpectedILIfluAH1infections[j]<-sum(ExpectedILIfluAH1infections.byage[1:n.age,j])
+   ExpectedILIfluAH3infections[j]<-sum(ExpectedILIfluAH3infections.byage[1:n.age,j])
+   ExpectedILIfluBinfections[j]<-sum(ExpectedILIfluBinfections.byage[1:n.age,j])
+
+   ExpectedILInonfluinfections[j]<-sum(expected.nonfluILI[1:n.age,j])
+   expected.proportion.fluAH1.pos[j]<-fluAH1.test.sensitivity*ExpectedILIfluAH1infections[j]/(ExpectedILIfluAH1infections[j]+ExpectedILIfluAH3infections[j]+ExpectedILIfluBinfections[j]+ExpectedILInonfluinfections[j])
+   expected.proportion.fluAH3.pos[j]<-fluAH3.test.sensitivity*ExpectedILIfluAH3infections[j]/(ExpectedILIfluAH1infections[j]+ExpectedILIfluAH3infections[j]+ExpectedILIfluBinfections[j]+ExpectedILInonfluinfections[j])
+   expected.proportion.fluB.pos[j]<-fluB.test.sensitivity*ExpectedILIfluBinfections[j]/(ExpectedILIfluAH1infections[j]+ExpectedILIfluAH3infections[j]+ExpectedILIfluBinfections[j]+ExpectedILInonfluinfections[j])
+
+}
+
+
+
+ for(j in 1:12) {
+     ExpectedILIfluAH1infections.monthly[j]<-sum(ExpectedILIfluAH1infections.byage.monthly[1:n.age,j])
+      ExpectedILIfluAH3infections.monthly[j]<-sum(ExpectedILIfluAH3infections.byage.monthly[1:n.age,j])
+      ExpectedILIfluBinfections.monthly[j]<-sum(ExpectedILIfluBinfections.byage.monthly[1:n.age,j])
+      ExpectedILInonfluinfections.monthly[j]<-sum(expected.nonfluILI.monthly[1:n.age,j])
+      expected.proportion.fluAH1.pos.monthly[j] <- fluAH1.test.sensitivity * ExpectedILIfluAH1infections.monthly[j]/(ExpectedILIfluAH1infections.monthly[j] +ExpectedILIfluAH3infections.monthly[j] + ExpectedILIfluBinfections.monthly[j] + ExpectedILInonfluinfections.monthly[j])
+
+      expected.proportion.fluAH3.pos.monthly[j] <- fluAH3.test.sensitivity * ExpectedILIfluAH3infections.monthly[j]/(ExpectedILIfluAH1infections.monthly[j] +ExpectedILIfluAH3infections.monthly[j] + ExpectedILIfluBinfections.monthly[j] + ExpectedILInonfluinfections.monthly[j])
+
+
+       expected.proportion.fluB.pos.monthly[j] <- fluB.test.sensitivity * ExpectedILIfluBinfections.monthly[j]/(ExpectedILIfluAH1infections.monthly[j] +ExpectedILIfluAH3infections.monthly[j] + ExpectedILIfluBinfections.monthly[j] + ExpectedILInonfluinfections.monthly[j])
+
+      for(i in 1:n.age) {
+         NewInfectionsAH1.monthly.tmp[i,j]<-max(NewInfectionsAH1.monthly[i,j],1)   #.tmp var is to avoid errors with binomial trials=0
+         NewInfectionsAH3.monthly.tmp[i,j]<-max(NewInfectionsAH3.monthly[i,j],1)   #.tmp var is to avoid errors with binomial trials=0
+         NewInfectionsB.monthly.tmp[i,j]<-max(NewInfectionsB.monthly[i,j],1)   #.tmp var is to avoid errors with binomial trials=0
+         ExpectedILIfluAH1infections.byage.monthly[i,j]<-prob.ILI.reportedAH1[i] * NewInfectionsAH1.monthly.tmp[i,j]
+         ExpectedILIfluAH3infections.byage.monthly[i,j]<-prob.ILI.reportedAH3[i] * NewInfectionsAH3.monthly.tmp[i,j]
+         ExpectedILIfluBinfections.byage.monthly[i,j]<-prob.ILI.reportedB[i] * NewInfectionsB.monthly.tmp[i,j]
+     } #end for i
+
+}  #end for j
+
+
+for(i in 1:n.age) {
+	for(j in 1:1) {
+			CumInfectionsAH1[i,j]<- 0
+			NewInfectionsAH1[i,j]<-0
+			CumInfectionsAH3[i,j]<- 0
+			NewInfectionsAH3[i,j]<-0			
+			CumInfectionsB[i,j]<- 0
+			NewInfectionsB[i,j]<-0
+			
+			CumInfectionsAH1vacc1[i,j]<- 0
+		         CumInfectionsAH3vacc1[i,j]<- 0			
+			CumInfectionsBvacc1[i,j]<- 0
+			CumInfectionsAH1vacc2[i,j]<- 0
+			CumInfectionsAH3vacc2[i,j]<- 0
+			CumInfectionsBvacc2[i,j]<- 0
+			CumInfectionsAH1vacc3[i,j]<- 0
+			CumInfectionsAH3vacc3[i,j]<- 0
+			CumInfectionsBvacc3[i,j]<- 0
+		 	CumInfectionsAH1vacc4[i,j]<- 0
+		 	CumInfectionsAH3vacc4[i,j]<- 0
+		 	CumInfectionsBvacc4[i,j]<- 0			
+		 	CumInfectionsAH1vacc5[i,j]<- 0
+		 	CumInfectionsAH3vacc5[i,j]<- 0
+		 	CumInfectionsBvacc5[i,j]<- 0
+		 	CumInfectionsAH1vacc6[i,j]<- 0
+		 	CumInfectionsAH3vacc6[i,j]<- 0
+		 	CumInfectionsBvacc6[i,j]<- 0				
+		 	CumInfectionsAH1vacc7[i,j]<- 0
+		 	CumInfectionsAH3vacc7[i,j]<- 0
+		 	CumInfectionsBvacc7[i,j]<- 0				
+		
+		
+           		         PreventedNewInfectionsAH1.DirectProtVacc1[i,j]<-0
+           		         PreventedNewInfectionsAH1.DirectProtVacc2[i,j]<-0
+           		         PreventedNewInfectionsAH1.DirectProtVacc3[i,j]<-0
+           		         PreventedNewInfectionsAH1.DirectProtVacc4[i,j]<-0
+           		         PreventedNewInfectionsAH1.DirectProtVacc5[i,j]<-0
+           		         PreventedNewInfectionsAH1.DirectProtVacc6[i,j]<-0
+   		                 PreventedNewInfectionsAH1.DirectProtVacc7[i,j]<-0
+
+       		                 PreventedNewInfectionsAH3.DirectProtVacc1[i,j]<-0
+           		         PreventedNewInfectionsAH3.DirectProtVacc2[i,j]<-0
+           		         PreventedNewInfectionsAH3.DirectProtVacc3[i,j]<-0
+           		         PreventedNewInfectionsAH3.DirectProtVacc4[i,j]<-0
+           		         PreventedNewInfectionsAH3.DirectProtVacc5[i,j]<-0
+           		         PreventedNewInfectionsAH3.DirectProtVacc6[i,j]<-0
+ 			         PreventedNewInfectionsAH3.DirectProtVacc7[i,j]<-0
+
+       		                 PreventedNewInfectionsB.DirectProtVacc1[i,j]<-0
+           		         PreventedNewInfectionsB.DirectProtVacc2[i,j]<-0
+           		         PreventedNewInfectionsB.DirectProtVacc3[i,j]<-0
+           		         PreventedNewInfectionsB.DirectProtVacc4[i,j]<-0
+           		         PreventedNewInfectionsB.DirectProtVacc5[i,j]<-0
+           		         PreventedNewInfectionsB.DirectProtVacc6[i,j]<-0
+			         PreventedNewInfectionsB.DirectProtVacc7[i,j]<-0
+
+	}	
+	
+	for(j in 2:n.grid) {		
+			#  note I is the prevalent number of infections (not the new infections)
+			NewInfectionsAH1[i,j]<-CumInfectionsAH1[i,j]-CumInfectionsAH1[i,j-1]
+			NewInfectionsAH3[i,j]<-CumInfectionsAH3[i,j]-CumInfectionsAH3[i,j-1]			
+			NewInfectionsB[i,j]<-CumInfectionsB[i,j]-CumInfectionsB[i,j-1]
+			
+	# Now calc how many infections  would be prevented due to direct protection from vaccine polices 1 to 6
+			PreventedNewInfectionsAH1.DirectProtVacc1[i,j]<-NewInfectionsAH1[i,j] *  (vaccinated1[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsAH3.DirectProtVacc1[i,j]<-NewInfectionsAH3[i,j] *   (vaccinated1[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsB.DirectProtVacc1[i,j]<-NewInfectionsB[i,j] *   (vaccinated1[i,j]-vaccinated0[i,j])/N[i] 
+			
+			PreventedNewInfectionsAH1.DirectProtVacc2[i,j]<-NewInfectionsAH1[i,j] * (vaccinated2[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsAH3.DirectProtVacc2[i,j]<-NewInfectionsAH3[i,j] *  (vaccinated2[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsB.DirectProtVacc2[i,j]<-NewInfectionsB[i,j] * (vaccinated2[i,j]-vaccinated0[i,j])/N[i] 
+			
+			PreventedNewInfectionsAH1.DirectProtVacc3[i,j]<-NewInfectionsAH1[i,j] *  (vaccinated3[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsAH3.DirectProtVacc3[i,j]<-NewInfectionsAH3[i,j] *  (vaccinated3[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsB.DirectProtVacc3[i,j]<-NewInfectionsB[i,j] *  (vaccinated3[i,j]-vaccinated0[i,j])/N[i] 
+			
+			PreventedNewInfectionsAH1.DirectProtVacc4[i,j]<-NewInfectionsAH1[i,j] * (vaccinated4[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsAH3.DirectProtVacc4[i,j]<-NewInfectionsAH3[i,j] *  (vaccinated4[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsB.DirectProtVacc4[i,j]<-NewInfectionsB[i,j] * (vaccinated4[i,j]-vaccinated0[i,j])/N[i] 
+			
+			PreventedNewInfectionsAH1.DirectProtVacc5[i,j]<-NewInfectionsAH1[i,j] * (vaccinated5[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsAH3.DirectProtVacc5[i,j]<-NewInfectionsAH3[i,j] *  (vaccinated5[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsB.DirectProtVacc5[i,j]<-NewInfectionsB[i,j] *  (vaccinated5[i,j]-vaccinated0[i,j])/N[i] 
+			
+			PreventedNewInfectionsAH1.DirectProtVacc6[i,j]<-NewInfectionsAH1[i,j] * (vaccinated6[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsAH3.DirectProtVacc6[i,j]<-NewInfectionsAH3[i,j] *  (vaccinated6[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsB.DirectProtVacc6[i,j]<-NewInfectionsB[i,j] *  (vaccinated6[i,j]-vaccinated0[i,j])/N[i] 
+			
+			PreventedNewInfectionsAH1.DirectProtVacc7[i,j]<-NewInfectionsAH1[i,j] * (vaccinated7[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsAH3.DirectProtVacc7[i,j]<-NewInfectionsAH3[i,j] *  (vaccinated7[i,j]-vaccinated0[i,j])/N[i] 
+			PreventedNewInfectionsB.DirectProtVacc7[i,j]<-NewInfectionsB[i,j] *  (vaccinated7[i,j]-vaccinated0[i,j])/N[i] 
+				
+	}
+
+  # calc new infections by month
+
+  		        NewInfectionsAH1.monthly[i,1]<-CumInfectionsAH1[i,31]   #Jan
+		        NewInfectionsAH3.monthly[i,1]<-CumInfectionsAH3[i,31]   #Jan
+			NewInfectionsB.monthly[i,1]<-CumInfectionsB[i,31]
+			expected.nonfluILI.monthly[i,1]<-sum(expected.nonfluILI[i,1:31])
+			
+   		        NewInfectionsAH1.monthly[i,2]<-CumInfectionsAH1[i,59]-CumInfectionsAH1[i,31]  #Feb
+			NewInfectionsAH3.monthly[i,2]<-CumInfectionsAH3[i,59]-CumInfectionsAH3[i,31] 
+			NewInfectionsB.monthly[i,2]<-CumInfectionsB[i,59]-CumInfectionsB[i,31]	
+			expected.nonfluILI.monthly[i,2]<-sum(expected.nonfluILI[i,32:59])
+			
+	      		NewInfectionsAH1.monthly[i,3]<-CumInfectionsAH1[i,90]-CumInfectionsAH1[i,59]  #March
+	 		NewInfectionsAH3.monthly[i,3]<-CumInfectionsAH3[i,90]-CumInfectionsAH3[i,59] 
+			NewInfectionsB.monthly[i,3]<-CumInfectionsB[i,90]-CumInfectionsB[i,59]	
+	                expected.nonfluILI.monthly[i,3]<-sum(expected.nonfluILI[i,60:90])
+			
+	                NewInfectionsAH1.monthly[i,4]<-CumInfectionsAH1[i,120]-CumInfectionsAH1[i,90]  #April
+			NewInfectionsAH3.monthly[i,4]<-CumInfectionsAH3[i,120]-CumInfectionsAH3[i,90]
+			NewInfectionsB.monthly[i,4]<-CumInfectionsB[i,120]-CumInfectionsB[i,90]	  
+            		expected.nonfluILI.monthly[i,4]<-sum(expected.nonfluILI[i,91:120])	
+	
+	        	NewInfectionsAH1.monthly[i,5]<-CumInfectionsAH1[i,151]-CumInfectionsAH1[i,120]  #May
+			NewInfectionsAH3.monthly[i,5]<-CumInfectionsAH3[i,151]-CumInfectionsAH3[i,120] 
+			NewInfectionsB.monthly[i,5]<-CumInfectionsB[i,151]-CumInfectionsB[i,120]	
+	        	expected.nonfluILI.monthly[i,5]<-sum(expected.nonfluILI[i,121:151])	
+			
+	        	NewInfectionsAH1.monthly[i,6]<-CumInfectionsAH1[i,181]-CumInfectionsAH1[i,151]  #June
+			NewInfectionsAH3.monthly[i,6]<-CumInfectionsAH3[i,181]-CumInfectionsAH3[i,151]
+			NewInfectionsB.monthly[i,6]<-CumInfectionsB[i,181]-CumInfectionsB[i,151]	
+	   	        expected.nonfluILI.monthly[i,6]<-sum(expected.nonfluILI[i,152:181])	
+			
+	        	NewInfectionsAH1.monthly[i,7]<-CumInfectionsAH1[i,212]-CumInfectionsAH1[i,181]  #July
+			NewInfectionsAH3.monthly[i,7]<-CumInfectionsAH3[i,212]-CumInfectionsAH3[i,181] 
+			NewInfectionsB.monthly[i,7]<-CumInfectionsB[i,212]-CumInfectionsB[i,181]	
+		    	expected.nonfluILI.monthly[i,7]<-sum(expected.nonfluILI[i,182:212])	
+			
+	        	NewInfectionsAH1.monthly[i,8]<-CumInfectionsAH1[i,243]-CumInfectionsAH1[i,212]  #Aug
+			NewInfectionsAH3.monthly[i,8]<-CumInfectionsAH3[i,243]-CumInfectionsAH3[i,212]
+			NewInfectionsB.monthly[i,8]<-CumInfectionsB[i,243]-CumInfectionsB[i,212]	
+		  	expected.nonfluILI.monthly[i,8]<-sum(expected.nonfluILI[i,213:243])	
+			
+	       		NewInfectionsAH1.monthly[i,9]<-CumInfectionsAH1[i,273]-CumInfectionsAH1[i,243]  #Sep
+			NewInfectionsAH3.monthly[i,9]<-CumInfectionsAH3[i,273]-CumInfectionsAH3[i,243] 
+			NewInfectionsB.monthly[i,9]<-CumInfectionsB[i,273]-CumInfectionsB[i,243]	
+		    	expected.nonfluILI.monthly[i,9]<-sum(expected.nonfluILI[i,244:273])	
+			
+	        	NewInfectionsAH1.monthly[i,10]<-CumInfectionsAH1[i,304]-CumInfectionsAH1[i,273]  #Oct
+			NewInfectionsAH3.monthly[i,10]<-CumInfectionsAH3[i,304]-CumInfectionsAH3[i,273]
+			NewInfectionsB.monthly[i,10]<-CumInfectionsB[i,304]-CumInfectionsB[i,273]	
+			expected.nonfluILI.monthly[i,10]<-sum(expected.nonfluILI[i,274:304])
+			
+	       		NewInfectionsAH1.monthly[i,11]<-CumInfectionsAH1[i,334]-CumInfectionsAH1[i,304]  #Nov
+			NewInfectionsAH3.monthly[i,11]<-CumInfectionsAH3[i,334]-CumInfectionsAH3[i,304]  #
+			NewInfectionsB.monthly[i,11]<-CumInfectionsB[i,334]-CumInfectionsB[i,304]	
+		  	expected.nonfluILI.monthly[i,11]<-sum(expected.nonfluILI[i,305:334])	
+			
+	       		NewInfectionsAH1.monthly[i,12]<-CumInfectionsAH1[i,365]-CumInfectionsAH1[i,334]  #Dec
+			NewInfectionsAH3.monthly[i,12]<-CumInfectionsAH3[i,365]-CumInfectionsAH3[i,334]
+			NewInfectionsB.monthly[i,12]<-CumInfectionsB[i,365]-CumInfectionsB[i,334]	
+		        expected.nonfluILI.monthly[i,12]<-sum(expected.nonfluILI[i,335:365])	
+   }  # end  for(i in 1:n.age) {
+
+
+
+# Now estimate OPD and IPD due to flu by assuming minimum values  over 12 months is the bseline not due to flu
+# and anything above that that is due to flu. 
+
+
+muIPD~dgamma(0.01,0.01)
+for(j in 1:6){     
+   minILI[j]<- ranked(ILIbyage[,j],1)    #smallest component
+   minIPD[j]<- ranked(IPDbyage[,j],1)  
+   for(i in 1:n.grid){
+     expected.nonfluILI[j,i]<-  minILI[j] /30   #expected non flu ILI in age group daily assuming background is min
+     expected.nonfluIPD[j,i]<- minIPD[j]/30
+   }   
+   total.expected.nonfluILI[j]<-sum(expected.nonfluILI[j,1:n.grid])
+   total.expected.nonfluIPD[j]<-sum(expected.nonfluIPD[j,1:n.grid])
+   total.observed.ILI[j]<-sum(ILIbyage[1:12,j])
+   total.observed.IPD[j]<-sum(IPDbyage[1:12,j])
+   total.predicted.flu.cases[j] <-  CumInfectionsAH1[j,365]*prob.infection.is.symptomaticAH1[j] +CumInfectionsAH3[j,365]*prob.infection.is.symptomaticAH3[j] +  CumInfectionsB[j,365] * prob.infection.is.symptomaticB[j]
+   total.predicted.flu.casesper1000[j] <- total.predicted.flu.cases[j]*1000/N[j]
+   estimatedILIduetoflu[j]<- total.observed.ILI[j]-total.expected.nonfluILI[j]
+   estimatedIPDduetoflu[j]<- total.observed.IPD[j]-total.expected.nonfluIPD[j]
+   estimatedOPDduetoflu[j]<- estimatedILIduetoflu[j]- estimatedIPDduetoflu[j]    #since ILI=IPD+OPD
+   probILIperflucase[j]<-    estimatedILIduetoflu[j]/ total.predicted.flu.cases[j]
+   probIPDperflucase[j]<-    estimatedIPDduetoflu[j]/ total.predicted.flu.cases[j]
+   probOPDperflucase[j]<-    estimatedOPDduetoflu[j]/ total.predicted.flu.cases[j]
+
+  #agei.background.factor[j]~dbeta(1,1) #scaling factor for background ILI
+   #use above line if fitting a polynomial to background rate (can't get this to work so far)    
+}
+  cost.cases<-sum(total.predicted.flu.cases[1:6])
+ 
+
+# 4. Simulated data	
+# Use this section to generate data for testing model (to check that fitting to data gives correct parameter)
+# Not currently used
+# A problem is that sampling from binomial distribution gives an error unless there is at least one trial ...
+# to get round the problem we introduce new temporary variables, which end in ".tmp"
+#for(j in 1:n.grid){
+#  for(i in 1:n.age) {
+#      # ILI data 
+#      simILI.fluAH1.tmp[i,j] ~ dbin(prob.ILI.reportedAH1[i], NewInfectionsAH1.tmp[i,j]) #true flu reported as ILI
+#      simILI.fluAH1[i,j] <-simILI.fluAH1.tmp[i,j] * step(NewInfectionsAH1[i,j])
+#
+#      simILI.fluAH3.tmp[i,j] ~ dbin(prob.ILI.reportedAH3[i], NewInfectionsAH3.tmp[i,j]) #true flu reported as ILI
+#      simILI.fluAH3[i,j] <-simILI.fluAH3.tmp[i,j] * step(NewInfectionsAH3[i,j])
+#
+#     simILI.fluB.tmp[i,j] ~ dbin(prob.ILI.reportedB[i], NewInfectionsB.tmp[i,j]) #true flu reported as ILI
+#      simILI.fluB[i,j] <-simILI.fluB.tmp[i,j] * step(NewInfectionsB[i,j])
+#    
+#      simILI.flu[i,j]<-simILI.fluAH1[i,j] +simILI.fluAH3[i,j] +simILI.fluB[i,j] 
+#
+#   #    expected.nonfluILI[i,j]<-  agei.background.factor[i]*N[i]*probnonfluILI[j]    #use this line if using polynomial background model of ILI    
+#      simILI.nonflu[i,j] ~dpois(expected.nonfluILI[i,j])                                 #non-flu reported as ILI (later make time varying)
+#     simILI.by.agegrp[i,j]<- simILI.flu[i,j] +simILI.nonflu[i,j] 
+#    }
+#
+#    simILIflutotal[j]<-sum(simILI.flu[1:n.age,j])
+#    simILIfluAH1total[j]<-sum(simILI.fluAH1[1:n.age,j])
+#    simILIfluAH3total[j]<-sum(simILI.fluAH3[1:n.age,j])
+#    simILIfluBtotal[j]<-sum(simILI.fluB[1:n.age,j])
+#    simILItotal[j]<-sum(simILI.by.agegrp[1:n.age,j])
+#    simNum.Tested[j]~dbin(probvirustesting,simILItotal[j])
+#    simNum.Tested2[j]<-max(simNum.Tested[j],1)
+#   simNum.fluA.pos[j]~dbin(expected.prob.fluA.pos[j], simNum.Tested2[j])
+ #  simProportion.fluA.ps[j]<-simNum.fluA.pos[j]/ simNum.Tested2[j]
+#   simNum.fluB.pos[j]~dbin(expected.prob.fluB.pos[j], simNum.Tested2[j])
+#   simProportion.fluB.ps[j]<-simNum.fluB.pos[j]/ simNum.Tested2[j]
+#}
+
+# 5. Transmission model 
+
+# The differential equations for a single population model in slow inline format
+#flu A
+#D(A[i,SA],t)  <- - lambdaA*sum(A[1:n.age,IA] )*A[i,SA]/N1[i] 
+#D(A[i,EA],t)  <-  lambdaA*sum(A[1:n.age,IA] )*A[i,SA]/N1[i] - fA*A[i,EA]
+#D(A[i,IA],t)    <-  fA*A[i,EA]  -recovA*A[i,IA]
+#D(A[i,RA],t)  <-  recovA*A[i,IA] 
+#D(A[i,cumIA],t)    <-  fA*A[i,EA]  # cumulative numbers in the I comparment 
+
+#flu B
+#D(A[i,SB],t)  <- - lambdaB*sum(A[1:n.age,IB] )*A[i,SB]/N1[i] 
+#D(A[i,EB],t)  <-  lambdaB*sum(A[1:n.age,IB] )*A[i,SB]/N1[i] - fB*A[i,EB]
+#D(A[i,IB],t)    <-  fB*A[i,EB]  -recovB*A[i,IB]
+#D(A[i,RB],t)  <-  recovB*A[i,IB] 
+#D(A[i,cumIB],t)    <-  fB*A[i,EB]  # cumulative numbers in the I comparment 
+
+# Policies to consider are
+#Policy 0: no vaccination   (except for 10% coverage in elderly)
+#Policy 1: School-based program 2-11 TIV
+#Policy 2: School-based program 2-11 LAIV
+#Policy 3: School-based program 2-17 LAIV
+#Policy 4: School-based program 2-5 LAIV
+#Policy 5: School-based program 6-11 LAIV
+#Policy 6: School-based program 12-17 LAIV
+#Policy 7: 66% coverage in 60plus only TIV
+
+# No vaccination policy (policy 0)
+solution0.AH1[1:n.grid,1:dim] <-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.novaxAH1[1:57], origin.vacc1[1:3],tol) #flu A H1
+solution0.AH3[1:n.grid,1:dim] <-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.novaxAH3[1:57], origin.vacc1[1:3],tol) #flu A H3
+solution0.B[1:n.grid,1:dim] <-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.novaxB[1:57], origin.vacc1[1:3],tol) #flu B
+
+# Vaccination policy 1 : TIV ages 2-11 (age groups 2 and 3)
+solutionV1.AH1[1:n.grid,1:dim]<-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.vax1AH1[1:57], origin.vacc1[1:3], tol) #flu A H1
+solutionV1.AH3[1:n.grid,1:dim]<-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.vax1AH3[1:57], origin.vacc1[1:3], tol) #flu A H3
+solutionV1.B[1:n.grid,1:dim]<-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.vax1B[1:57], origin.vacc1[1:3], tol) #flu B
+
+# Vaccination policy 2 : LAIV ages 2-11 (age groups 2 and 3)
+solutionV2.AH1[1:n.grid,1:dim]<-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.vax2AH1[1:57], origin.vacc1[1:3], tol) #flu A H1
+solutionV2.AH3[1:n.grid,1:dim]<-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.vax2AH3[1:57], origin.vacc1[1:3], tol) #flu A H3
+solutionV2.B[1:n.grid,1:dim]<-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.vax2B[1:57], origin.vacc1[1:3], tol) #flu B
+
+# Vaccination policy 3 : LAIV ages 2-17 (age groups 2, 3 and 4)
+solutionV3.AH1[1:n.grid,1:dim]<-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.vax3AH1[1:57], origin.vacc1[1:3], tol) #flu A H1
+solutionV3.AH3[1:n.grid,1:dim]<-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.vax3AH3[1:57], origin.vacc1[1:3], tol) #flu A H3
+solutionV3.B[1:n.grid,1:dim]<-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.vax3B[1:57], origin.vacc1[1:3], tol) #flu B
+
+# Vaccination policy 4 : LAIV ages 2-5 (age group 2)
+ solutionV4.AH1[1:n.grid,1:dim]<-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.vax4AH1[1:57], origin.vacc1[1:3], tol) #flu A H1
+ solutionV4.AH3[1:n.grid,1:dim]<-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.vax4AH3[1:57], origin.vacc1[1:3], tol) #flu A H3
+ solutionV4.B[1:n.grid,1:dim]<-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.vax4B[1:57], origin.vacc1[1:3], tol) #flu B
+
+# Vaccination policy 5 : LAIV ages 6-11 (age group 3)
+ solutionV5.AH1[1:n.grid,1:dim]<-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.vax5AH1[1:57], origin.vacc1[1:3], tol) #flu A H1
+ solutionV5.AH3[1:n.grid,1:dim]<-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.vax5AH3[1:57], origin.vacc1[1:3], tol) #flu A H3
+ solutionV5.B[1:n.grid,1:dim]<-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.vax5B[1:57], origin.vacc1[1:3], tol) #flu B
+
+# Vaccination policy 6: LAIV ages 12-17 (age group 4)
+ solutionV6.AH1[1:n.grid,1:dim]<-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.vax6AH1[1:57], origin.vacc1[1:3], tol) #flu A H1
+ solutionV6.AH3[1:n.grid,1:dim]<-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.vax6AH3[1:57], origin.vacc1[1:3], tol) #flu A H3
+ solutionV6.B[1:n.grid,1:dim]<-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.vax6B[1:57], origin.vacc1[1:3], tol) #flu B
+
+# Vaccination policy 7: TIV ages 60plus
+ solutionV7.AH1[1:n.grid,1:dim]<-flu6agesVx.v3(init[1:dim], grid[1:n.grid], theta.vax7AH1[1:57], origin.vacc1[1:3], tol) #flu A H1
+ solutionV7.AH3[1:n.grid,1:dim]<-flu6agesVx.v3(init[43:84], grid[1:n.grid], theta.vax7AH3[1:57], origin.vacc1[1:3], tol) #flu A H3
+ solutionV7.B[1:n.grid,1:dim]<-flu6agesVx.v3(init[85:126], grid[1:n.grid], theta.vax7B[1:57], origin.vacc1[1:3], tol) #flu B
+
+for(i in 1:6){
+  VaxRate[i]<-N[i]*VaxCoverage[i]/(vaxstopday-vaxstartday)
+}
+  
+VaxRate60plus.policy7<-N[6]*0.66/(vaxstopday-vaxstartday)
+
+origin.vacc1[1] <-0
+origin.vacc1[2]<-vaxstartday
+origin.vacc1[3]<-vaxstopday
+theta[1] <- lambdaAH1
+theta[2] <- fAH1
+theta[3] <- recovAH1
+theta[4] <-  Beta[1,1]
+theta[5]<-   Beta[1,2]
+theta[6]<- Beta[1,3]
+theta[7]<- Beta[1,4]
+theta[8]<- Beta[1,5]
+theta[9]<- Beta[1,6]
+theta[10]<- Beta[2,1]
+theta[11]<- Beta[2,2]
+theta[12]<- Beta[2,3]
+theta[13]<- Beta[2,4]
+theta[14]<- Beta[2,5]
+theta[15]<- Beta[2,6]
+theta[16]<- Beta[3,1]
+theta[17]<- Beta[3,2]
+theta[18]<- Beta[3,3]
+theta[19]<- Beta[3,4]
+theta[20]<- Beta[3,5]
+theta[21]<- Beta[3,6]
+theta[22]<- Beta[4,1]
+theta[23]<- Beta[4,2]
+theta[24]<- Beta[4,3]
+theta[25]<- Beta[4,4]
+theta[26]<- Beta[4,5]
+theta[27]<- Beta[4,6]
+theta[28]<- Beta[5,1]
+theta[29]<- Beta[5,2]
+theta[30]<- Beta[5,3]
+theta[31]<- Beta[5,4]
+theta[32]<- Beta[5,5]
+theta[33]<- Beta[5,6]
+theta[34]<- Beta[6,1]
+theta[35]<- Beta[6,2]
+theta[36]<- Beta[6,3]
+theta[37]<- Beta[6,4]
+theta[38]<- Beta[6,5]
+theta[39]<- Beta[6,6]
+theta[40]<-N[1]
+theta[41]<-N[2]
+theta[42]<-N[3]
+theta[43]<-N[4]
+theta[44]<-N[5]
+theta[45]<-N[6]
+theta[46]<-VaxRate[1]
+theta[47]<-VaxRate[2]
+theta[48]<-VaxRate[3]
+theta[49]<-VaxRate[4]
+theta[50]<-VaxRate[5]
+theta[51]<-VaxRate[6]
+theta[52]<-0 
+theta[53]<-0
+theta[54]<-0
+theta[55]<-0  
+theta[56]<-0  
+theta[57]<-0  
+
+ # elements 52-57 are vax efficacy in age groups 1 to 6
+
+# Set basic epi parameters
+ for(i in 1:3){
+  theta.novaxAH1[i]<-theta[i]
+  theta.vax1AH1[i]<-theta[i]
+  theta.vax2AH1[i]<-theta[i]
+  theta.vax3AH1[i]<-theta[i]
+  theta.vax4AH1[i]<-theta[i]
+  theta.vax5AH1[i]<-theta[i]
+  theta.vax6AH1[i]<-theta[i]
+  theta.vax7AH1[i]<-theta[i]
+ }
+ theta.novaxAH3[1]<-lambdaAH3
+ theta.novaxAH3[2]<-fAH3
+ theta.novaxAH3[3]<-recovAH3
+ theta.novaxB[1]<-lambdaB
+ theta.novaxB[2]<-fB
+ theta.novaxB[3]<-recovB
+ theta.vax1AH3[1]<-lambdaAH3
+ theta.vax1AH3[2]<-fAH3
+ theta.vax1AH3[3]<-recovAH3
+ theta.vax1B[1]<-lambdaB
+ theta.vax1B[2]<-fB
+ theta.vax1B[3]<-recovB
+ theta.vax2AH3[1]<-lambdaAH3
+ theta.vax2AH3[2]<-fAH3
+ theta.vax2AH3[3]<-recovAH3
+ theta.vax2B[1]<-lambdaB
+ theta.vax2B[2]<-fB
+ theta.vax2B[3]<-recovB
+ theta.vax3AH3[1]<-lambdaAH3
+ theta.vax3AH3[2]<-fAH3
+ theta.vax3AH3[3]<-recovAH3
+ theta.vax3B[1]<-lambdaB
+ theta.vax3B[2]<-fB
+ theta.vax3B[3]<-recovB
+ theta.vax4AH3[1]<-lambdaAH3
+ theta.vax4AH3[2]<-fAH3
+ theta.vax4AH3[3]<-recovAH3
+ theta.vax4B[1]<-lambdaB
+ theta.vax4B[2]<-fB
+ theta.vax4B[3]<-recovB
+ theta.vax5AH3[1]<-lambdaAH3
+ theta.vax5AH3[2]<-fAH3
+ theta.vax5AH3[3]<-recovAH3
+ theta.vax5B[1]<-lambdaB
+ theta.vax5B[2]<-fB
+ theta.vax5B[3]<-recovB
+ theta.vax6AH3[1]<-lambdaAH3
+ theta.vax6AH3[2]<-fAH3
+ theta.vax6AH3[3]<-recovAH3
+ theta.vax6B[1]<-lambdaB
+ theta.vax6B[2]<-fB
+ theta.vax6B[3]<-recovB
+ theta.vax7AH3[1]<-lambdaAH3
+ theta.vax7AH3[2]<-fAH3
+ theta.vax7AH3[3]<-recovAH3
+ theta.vax7B[1]<-lambdaB
+ theta.vax7B[2]<-fB
+ theta.vax7B[3]<-recovB
+
+# set mixing and population parameters
+ for(i in 4:45){
+  theta.novaxAH1[i]<-theta[i]
+  theta.novaxAH3[i]<-theta[i]
+  theta.novaxB[i]<-theta[i]
+  theta.vax1AH1[i]<-theta[i]
+  theta.vax1AH3[i]<-theta[i]
+  theta.vax1B[i]<-theta[i]
+  theta.vax2AH1[i]<-theta[i]
+  theta.vax2AH3[i]<-theta[i]
+  theta.vax2B[i]<-theta[i]
+  theta.vax3AH1[i]<-theta[i]
+  theta.vax3AH3[i]<-theta[i]
+  theta.vax3B[i]<-theta[i]
+  theta.vax4AH1[i]<-theta[i]
+  theta.vax4AH3[i]<-theta[i]
+  theta.vax4B[i]<-theta[i]
+  theta.vax5AH1[i]<-theta[i]
+  theta.vax5AH3[i]<-theta[i]
+  theta.vax5B[i]<-theta[i]
+  theta.vax6AH1[i]<-theta[i]
+  theta.vax6AH3[i]<-theta[i]
+  theta.vax6B[i]<-theta[i]
+  theta.vax7AH1[i]<-theta[i]
+  theta.vax7AH3[i]<-theta[i]
+  theta.vax7B[i]<-theta[i]
+ }
+
+# set vaccination rates 
+
+# policy 1 - no vacc except for coverage in elderly (i==51)
+ for(i in 46:50){
+   theta.novaxAH1[i]<-0
+   theta.novaxAH3[i]<-0
+   theta.novaxB[i]<-0
+ }
+
+# vaccinate age groups 2 and 3
+for(i in 47:48){ 
+  theta.vax1AH1[i]<-theta[i]
+  theta.vax1AH3[i]<-theta[i]
+  theta.vax1B[i]<-theta[i]
+  theta.vax2AH1[i]<-theta[i]
+  theta.vax2AH3[i]<-theta[i]
+  theta.vax2B[i]<-theta[i]
+}
+ # vaccinate age groups 2, 3 and 4
+for(i in 47:49){
+  theta.vax3AH1[i]<-theta[i]
+  theta.vax3AH3[i]<-theta[i]
+  theta.vax3B[i]<-theta[i]
+}
+# vaccinate age group 2
+  theta.vax4AH1[47]<-theta[47]
+  theta.vax4AH3[47]<-theta[47]
+  theta.vax4B[47]<-theta[47]
+
+# vaccinate age group 3
+  theta.vax5AH1[48]<-theta[48]
+  theta.vax5AH3[48]<-theta[48]
+  theta.vax5B[48]<-theta[48]
+
+# vaccinate age group 4
+  theta.vax6AH1[49]<-theta[49]
+  theta.vax6AH3[49]<-theta[49]
+  theta.vax6B[49]<-theta[49]
+
+# baseline coverage in elderly in all analysese (by default assume 10% coverage in eldery)
+  theta.novaxAH1[51]<-theta[51]
+  theta.novaxAH3[51]<-theta[51]
+  theta.novaxB[51]<-theta[51]
+
+  theta.vax1AH1[51]<-theta[51]
+  theta.vax1AH3[51]<-theta[51]
+  theta.vax1B[51]<-theta[51]
+
+theta.vax2AH1[51]<-theta[51]
+theta.vax2AH3[51]<-theta[51]
+theta.vax2B[51]<-theta[51]
+
+theta.vax3AH1[51]<-theta[51]
+theta.vax3AH3[51]<-theta[51]
+theta.vax3B[51]<-theta[51]
+
+theta.vax4AH1[51]<-theta[51]
+theta.vax4AH3[51]<-theta[51]
+theta.vax4B[51]<-0
+
+theta.vax5AH1[51]<-theta[51]
+theta.vax5AH3[51]<-theta[51]
+theta.vax5B[51]<-theta[51]
+
+theta.vax6AH1[51]<-theta[51]
+theta.vax6AH3[51]<-theta[51]
+theta.vax6B[51]<-theta[51]
+
+theta.vax7AH1[51]<- VaxRate60plus.policy7
+theta.vax7AH3[51]<-VaxRate60plus.policy7
+theta.vax7B[51]<-VaxRate60plus.policy7
+
+
+
+#age groups not vaccinated
+theta.vax1AH1[46]<-0
+theta.vax1AH3[46]<-0
+theta.vax1B[46]<-0
+theta.vax1AH1[49]<-0
+theta.vax1AH3[49]<-0
+theta.vax1B[49]<-0
+theta.vax1AH1[50]<-0
+theta.vax1AH3[50]<-0
+theta.vax1B[50]<-0
+
+theta.vax2AH1[46]<-0
+theta.vax2AH3[46]<-0
+theta.vax2B[46]<-0
+theta.vax2AH1[49]<-0
+theta.vax2AH3[49]<-0
+theta.vax2B[49]<-0
+theta.vax2AH1[50]<-0
+theta.vax2AH3[50]<-0
+theta.vax2B[50]<-0
+
+theta.vax3AH1[46]<-0
+theta.vax3AH3[46]<-0
+theta.vax3B[46]<-0
+theta.vax3AH1[50]<-0
+theta.vax3AH3[50]<-0
+theta.vax3B[50]<-0
+
+theta.vax4AH1[46]<-0
+theta.vax4AH3[46]<-0
+theta.vax4B[46]<-0
+theta.vax4AH1[48]<-0
+theta.vax4AH3[48]<-0
+theta.vax4B[48]<-0
+theta.vax4AH1[49]<-0
+theta.vax4AH3[49]<-0
+theta.vax4B[49]<-0
+theta.vax4AH1[50]<-0
+theta.vax4AH3[50]<-0
+theta.vax4B[50]<-0
+
+theta.vax5AH1[46]<-0
+theta.vax5AH3[46]<-0
+theta.vax5B[46]<-0
+theta.vax5AH1[47]<-0
+theta.vax5AH3[47]<-0
+theta.vax5B[47]<-0
+theta.vax5AH1[49]<-0
+theta.vax5AH3[49]<-0
+theta.vax5B[49]<-0
+theta.vax5AH1[50]<-0
+theta.vax5AH3[50]<-0
+theta.vax5B[50]<-0
+
+theta.vax6AH1[46]<-0
+theta.vax6AH3[46]<-0
+theta.vax6B[46]<-0
+theta.vax6AH1[47]<-0
+theta.vax6AH3[47]<-0
+theta.vax6B[47]<-0
+theta.vax6AH1[48]<-0
+theta.vax6AH3[48]<-0
+theta.vax6B[48]<-0
+theta.vax6AH1[50]<-0
+theta.vax6AH3[50]<-0
+theta.vax6B[50]<-0
+
+theta.vax7AH1[46]<-0
+theta.vax7AH3[46]<-0
+theta.vax7B[46]<-0
+theta.vax7AH1[47]<-0
+theta.vax7AH3[47]<-0
+theta.vax7B[47]<-0
+theta.vax7AH1[48]<-0
+theta.vax7AH3[48]<-0
+theta.vax7B[48]<-0
+theta.vax7AH1[49]<-0
+theta.vax7AH3[49]<-0
+theta.vax7B[49]<-0
+theta.vax7AH1[50]<-0
+theta.vax7AH3[50]<-0
+theta.vax7B[50]<-0
+
+
+# set vaccine efficacies
+# Code allows these to differ by age group. Not that LAIV is not licensed for elderly or those less than 2
+# so for youngest and oldest age groups default vaccine efficacy is for TIV.
+ theta.novaxAH1[52]<-0.0
+ theta.novaxAH3[52]<-0.0
+ theta.novaxB[52]<-0.0
+ theta.novaxAH1[53]<-0.0
+ theta.novaxAH3[53]<-0.0
+ theta.novaxB[53]<-0.0
+ theta.novaxAH1[54]<-0.0
+ theta.novaxAH3[54]<-0.0
+ theta.novaxB[54]<-0.0
+ theta.novaxAH1[55]<-0.0
+ theta.novaxAH3[55]<-0.0
+ theta.novaxB[55]<-0.0
+ theta.novaxAH1[56]<-0.0
+ theta.novaxAH3[56]<-0.0
+ theta.novaxB[56]<-0.0
+ theta.novaxAH1[57]<-VaxEfficacyAH1.TIV
+ theta.novaxAH3[57]<-VaxEfficacyAH3.TIV
+ theta.novaxB[57]<-VaxEfficacyB.TIV
+theta.vax1AH1[52]<-VaxEfficacyAH1.TIV
+theta.vax1AH3[52]<-VaxEfficacyAH3.TIV
+theta.vax1B[52]<-VaxEfficacyB.TIV
+theta.vax1AH1[53]<-VaxEfficacyAH1.TIV
+theta.vax1AH3[53]<-VaxEfficacyAH3.TIV
+theta.vax1B[53]<-VaxEfficacyB.TIV
+theta.vax1AH1[54]<-VaxEfficacyAH1.TIV
+theta.vax1AH3[54]<-VaxEfficacyAH3.TIV
+theta.vax1B[54]<-VaxEfficacyB.TIV
+theta.vax1AH1[55]<-VaxEfficacyAH1.TIV
+theta.vax1AH3[55]<-VaxEfficacyAH3.TIV
+theta.vax1B[55]<-VaxEfficacyB.TIV
+theta.vax1AH1[56]<-VaxEfficacyAH1.TIV
+theta.vax1AH3[56]<-VaxEfficacyAH3.TIV
+theta.vax1B[56]<-VaxEfficacyB.TIV
+theta.vax1AH1[57]<-VaxEfficacyAH1.TIV
+theta.vax1AH3[57]<-VaxEfficacyAH3.TIV
+theta.vax1B[57]<-VaxEfficacyB.TIV
+
+theta.vax2AH1[52]<-VaxEfficacyAH1.TIV
+theta.vax2AH3[52]<-VaxEfficacyAH3.TIV
+theta.vax2B[52]<-VaxEfficacyB.TIV
+theta.vax2AH1[53]<-VaxEfficacyAH1.LAIV
+theta.vax2AH3[53]<-VaxEfficacyAH3.LAIV
+theta.vax2B[53]<-VaxEfficacyB.LAIV
+theta.vax2AH1[54]<-VaxEfficacyAH1.LAIV
+theta.vax2AH3[54]<-VaxEfficacyAH3.LAIV
+theta.vax2B[54]<-VaxEfficacyB.LAIV
+theta.vax2AH1[55]<-VaxEfficacyAH1.LAIV
+theta.vax2AH3[55]<-VaxEfficacyAH3.LAIV
+theta.vax2B[55]<-VaxEfficacyB.LAIV
+theta.vax2AH1[56]<-VaxEfficacyAH1.LAIV
+theta.vax2AH3[56]<-VaxEfficacyAH3.LAIV
+theta.vax2B[56]<-VaxEfficacyB.LAIV
+theta.vax2AH1[57]<-VaxEfficacyAH1.TIV
+theta.vax2AH3[57]<-VaxEfficacyAH3.TIV
+theta.vax2B[57]<-VaxEfficacyB.TIV
+
+theta.vax3AH1[52]<-VaxEfficacyAH1.TIV
+theta.vax3AH3[52]<-VaxEfficacyAH3.TIV
+theta.vax3B[52]<-VaxEfficacyB.TIV
+theta.vax3AH1[53]<-VaxEfficacyAH1.LAIV
+theta.vax3AH3[53]<-VaxEfficacyAH3.LAIV
+theta.vax3B[53]<-VaxEfficacyB.LAIV
+theta.vax3AH1[54]<-VaxEfficacyAH1.LAIV
+theta.vax3AH3[54]<-VaxEfficacyAH3.LAIV
+theta.vax3B[54]<-VaxEfficacyB.LAIV
+theta.vax3AH1[55]<-VaxEfficacyAH1.LAIV
+theta.vax3AH3[55]<-VaxEfficacyAH3.LAIV
+theta.vax3B[55]<-VaxEfficacyB.LAIV
+theta.vax3AH1[56]<-VaxEfficacyAH1.LAIV
+theta.vax3AH3[56]<-VaxEfficacyAH3.LAIV
+theta.vax3B[56]<-VaxEfficacyB.LAIV
+theta.vax3AH1[57]<-VaxEfficacyAH1.TIV
+theta.vax3AH3[57]<-VaxEfficacyAH3.TIV
+theta.vax3B[57]<-VaxEfficacyB.TIV
+
+theta.vax4AH1[52]<-VaxEfficacyAH1.TIV
+theta.vax4AH3[52]<-VaxEfficacyAH3.TIV
+theta.vax4B[52]<-VaxEfficacyB.TIV
+theta.vax4AH1[53]<-VaxEfficacyAH1.LAIV
+theta.vax4AH3[53]<-VaxEfficacyAH3.LAIV
+theta.vax4B[53]<-VaxEfficacyB.LAIV
+theta.vax4AH1[54]<-VaxEfficacyAH1.LAIV
+theta.vax4AH3[54]<-VaxEfficacyAH3.LAIV
+theta.vax4B[54]<-VaxEfficacyB.LAIV
+theta.vax4AH1[55]<-VaxEfficacyAH1.LAIV
+theta.vax4AH3[55]<-VaxEfficacyAH3.LAIV
+theta.vax4B[55]<-VaxEfficacyB.LAIV
+theta.vax4AH1[56]<-VaxEfficacyAH1.LAIV
+theta.vax4AH3[56]<-VaxEfficacyAH3.LAIV
+theta.vax4B[56]<-VaxEfficacyB.LAIV
+theta.vax4AH1[57]<-VaxEfficacyAH1.TIV
+theta.vax4AH3[57]<-VaxEfficacyAH3.TIV
+theta.vax4B[57]<-VaxEfficacyB.TIV
+
+theta.vax5AH1[52]<-VaxEfficacyAH1.TIV
+theta.vax5AH3[52]<-VaxEfficacyAH3.TIV
+theta.vax5B[52]<-VaxEfficacyB.TIV
+theta.vax5AH1[53]<-VaxEfficacyAH1.LAIV
+theta.vax5AH3[53]<-VaxEfficacyAH3.LAIV
+theta.vax5B[53]<-VaxEfficacyB.LAIV
+theta.vax5AH1[54]<-VaxEfficacyAH1.LAIV
+theta.vax5AH3[54]<-VaxEfficacyAH3.LAIV
+theta.vax5B[54]<-VaxEfficacyB.LAIV
+theta.vax5AH1[55]<-VaxEfficacyAH1.LAIV
+theta.vax5AH3[55]<-VaxEfficacyAH3.LAIV
+theta.vax5B[55]<-VaxEfficacyB.LAIV
+theta.vax5AH1[56]<-VaxEfficacyAH1.LAIV
+theta.vax5AH3[56]<-VaxEfficacyAH3.LAIV
+theta.vax5B[56]<-VaxEfficacyB.LAIV
+theta.vax5AH1[57]<-VaxEfficacyAH1.TIV
+theta.vax5AH3[57]<-VaxEfficacyAH3.TIV
+theta.vax5B[57]<-VaxEfficacyB.TIV
+
+theta.vax6AH1[52]<-VaxEfficacyAH1.TIV
+theta.vax6AH3[52]<-VaxEfficacyAH3.TIV
+theta.vax6B[52]<-VaxEfficacyB.TIV
+theta.vax6AH1[53]<-VaxEfficacyAH1.LAIV
+theta.vax6AH3[53]<-VaxEfficacyAH3.LAIV
+theta.vax6B[53]<-VaxEfficacyB.LAIV
+theta.vax6AH1[54]<-VaxEfficacyAH1.LAIV
+theta.vax6AH3[54]<-VaxEfficacyAH3.LAIV
+theta.vax6B[54]<-VaxEfficacyB.LAIV
+theta.vax6AH1[55]<-VaxEfficacyAH1.LAIV
+theta.vax6AH3[55]<-VaxEfficacyAH3.LAIV
+theta.vax6B[55]<-VaxEfficacyB.LAIV
+theta.vax6AH1[56]<-VaxEfficacyAH1.LAIV
+theta.vax6AH3[56]<-VaxEfficacyAH3.LAIV
+theta.vax6B[56]<-VaxEfficacyB.LAIV
+theta.vax6AH1[57]<-VaxEfficacyAH1.TIV
+theta.vax6AH3[57]<-VaxEfficacyAH3.TIV
+theta.vax6B[57]<-VaxEfficacyB.TIV
+
+theta.vax7AH1[52]<-VaxEfficacyAH1.TIV
+theta.vax7AH3[52]<-VaxEfficacyAH3.TIV
+theta.vax7B[52]<-VaxEfficacyB.TIV
+theta.vax7AH1[53]<-VaxEfficacyAH1.LAIV
+theta.vax7AH3[53]<-VaxEfficacyAH3.LAIV
+theta.vax7B[53]<-VaxEfficacyB.LAIV
+theta.vax7AH1[54]<-VaxEfficacyAH1.LAIV
+theta.vax7AH3[54]<-VaxEfficacyAH3.LAIV
+theta.vax7B[54]<-VaxEfficacyB.LAIV
+theta.vax7AH1[55]<-VaxEfficacyAH1.LAIV
+theta.vax7AH3[55]<-VaxEfficacyAH3.LAIV
+theta.vax7B[55]<-VaxEfficacyB.LAIV
+theta.vax7AH1[56]<-VaxEfficacyAH1.LAIV
+theta.vax7AH3[56]<-VaxEfficacyAH3.LAIV
+theta.vax7B[56]<-VaxEfficacyB.LAIV
+theta.vax7AH1[57]<-VaxEfficacyAH1.TIV
+theta.vax7AH3[57]<-VaxEfficacyAH3.TIV
+theta.vax7B[57]<-VaxEfficacyB.TIV
+
+# TIV efficacy
+
+
+# Estimate vaccine efficacy of LAIV based on meta-analysis of two trials
+# One for age up to 15 (Loeb 2010 JAMA) and one for age up to 2 yrs (Hoberman 2003 Jama), the latter having two years of data
+
+# First VE in those age 36months to 15 years, based on two trials (Loeb 2010 & Clover 1991 - both CRCTs but 
+# design effect is accounted for using the first approach as described here
+# http://cccrg.cochrane.org/sites/cccrg.cochrane.org/files/uploads/ClusterRCTs.pdf)
+	   for( i in 1 : t.lt15.Num ) {
+   	     design.effect[i]<-1+ (mean.cluster.size[i] -1)*ICC[i] #about 1.07 for Loeb and 1.007 for clover
+     	        t.lt15.cc.adj[i]<-round(t.lt15.cc[i]/design.effect[i])
+                t.lt15.cv.adj[i]<-round(t.lt15.cv[i]/design.effect[i])
+ 	        t.lt15.nc.adj[i]<-round(t.lt15.nc[i]/design.effect[i])
+                t.lt15.nv.adj[i]<-round(t.lt15.nv[i]/design.effect[i])
+                t.lt15.cc.adj[i] ~ dbin(t.lt15.pc[i], t.lt15.nc.adj[i])
+    	        t.lt15.cv.adj[i] ~ dbin(t.lt15.pv[i], t.lt15.nv.adj[i])
+	     #  t.lt15.cc[i] ~ dbin(t.lt15.pc[i], t.lt15.nc[i])     #   uncomment for analysis not adjusting for clustering 
+    	     #  t.lt15.cv[i] ~ dbin(t.lt15.pv[i], t.lt15.nv[i])
+	       logit(t.lt15.pc[i]) <- t.lt15.mu[i]	
+	       logit(t.lt15.pv[i]) <- t.lt15.mu[i] + t.lt15.delta
+	       t.lt15.mu[i] ~ dnorm(t.lt15.m,t.lt15.tau2)	      
+	   }
+	
+	    t.lt15.m~ dnorm(0.0,1.0E-5)
+    	    t.lt15.tau2 ~ dgamma(0.001,0.001)
+            sigma2 <- 1 / sqrt(tau2)	
+  	    t.lt15.delta ~ dnorm(t.lt15.d, t.lt15.tau)
+	    t.lt15.d ~ dnorm(0.0,1.0E-5)
+	    t.lt15.tau ~ dgamma(0.001,0.001)
+	    t.lt15.mu.new ~ dnorm(t.lt15.m, t.lt15.tau2)
+    	   VE.predict.t.lt15<-(1-exp(t.lt15.delta))/(1+exp(t.lt15.mu.new+t.lt15.delta))
+	   #	VE.predict.t.lt15<-(1-exp(t.lt15.delta))/(1+exp(t.lt15.mu+t.lt15.delta))
+
+	# Then VE in those aged up to two years old (based from two years of data  from Hoberman 2003 ...treat as fixed effects (however, comment out for now as we currently don't consider scenarios where we vaccinate those less than 2)
+
+
+         VaxEfficacyAH1.TIV<-VE.predict.t.lt15
+         VaxEfficacyAH3.TIV<-VE.predict.t.lt15 
+         VaxEfficacyB.TIV<-VE.predict.t.lt15
+
+
+# LAIV efficacy
+
+#Estimate vaccine efficacy of LAIV based on meta-analysis of three trials (using per protocol outcomes & all confirmed flu)
+ # fixed  effects model  (no substantial improvement in VE model going to random effects based on the DIC).
+ # note that our estimate of vaccine efficacy (VE.predict is  1-prob.infection.if.vaccinated/prob.infection.if.not.vaccinated
+# which is the same as the at used by Tan et al. 
+# This definition also conveniently corresponds to prorportion of people who need to be completely protected by vaccine
+# (with the remainder having no protection) to reduce the overall probability of infection to that observed. 
+# we consider all flu infections & use the ITT
+#cv is cases in the vaccine group
+#nv is the number in the vaccine group
+#
+#cc is cases in the control group 
+#nc is number in the ctonrol group
+#Data are from Tam 2007 (year 1 all, and year 2 group who received placebo in year 1)
+#And from Lum 
+
+
+ for( i in 1 : Num ) {
+    cc[i] ~ dbin(pc[i], nc[i])
+    cv[i] ~ dbin(pv[i], nv[i])
+	logit(pc[i]) <- mu[i]	
+	logit(pv[i]) <- mu[i] + delta
+	mu[i] ~ dnorm(m,tau2)	
+  }
+  m~ dnorm(0.0,1.0E-5)
+  tau2 ~ dgamma(0.001,0.001)
+  delta ~ dnorm(d, tau)
+  d ~ dnorm(0.0,1.0E-5)
+  tau ~ dgamma(0.001,0.001)
+  mu.new ~ dnorm(m, tau2)
+  VE.predict<-(1-exp(delta))/(1+exp(mu.new+delta))
+  VaxEfficacyAH1.LAIV<-VE.predict
+  VaxEfficacyAH3.LAIV<-VE.predict
+  VaxEfficacyB.LAIV<-VE.predict
+
+
+#  6. Initial conditions for dynamic model:
+
+# proportion immune (should make these distributions and also estimate initially number infected)
+
+
+
+# Initial values for ODEs for H1N1
+	init[SA1] <- SinitAH1[1] ;  	init[EA1] <-1 + Einit.fluAH1[1];	init[IA1]<-Iinit.fluAH1[1];	init[RA1]<-RinitAH1[1];init[cumIA1] <- 0
+	init[SA2] <- SinitAH1[2];  	init[EA2] <- 1 + Einit.fluAH1[2];	init[IA2]<-Iinit.fluAH1[2];	init[RA2]<-RinitAH1[2];init[cumIA2] <- 0
+	init[SA3] <- SinitAH1[3];  	init[EA3] <- 1 + Einit.fluAH1[3];	init[IA3]<-Iinit.fluAH1[3];	init[RA3]<-RinitAH1[3];init[cumIA3] <- 0
+	init[SA4] <- SinitAH1[4];  	init[EA4] <- 1 + Einit.fluAH1[4];	init[IA4]<-Iinit.fluAH1[4];	init[RA4]<-RinitAH1[4];init[cumIA4] <- 0
+	init[SA5] <- SinitAH1[5];  	init[EA5] <- 1 + Einit.fluAH1[5];	init[IA5]<- Iinit.fluAH1[5];	init[RA5]<-RinitAH1[5];init[cumIA5]<- 0
+	init[SA6] <- SinitAH1[6];  	init[EA6] <- 1 + Einit.fluAH1[6];	init[IA6]<- Iinit.fluAH1[6];	init[RA6]<-RinitAH1[6];init[cumIA6]<- 0
+	init[SAV1]<-0;  init[SAV2]<-0;  init[SAV3]<-0;  init[SAV4]<-0;  init[SAV5]<-0;  init[SAV6]<-0; # number suscept and vaccinated
+	init[VA1]<-0;  init[VA2]<-0;  init[VA3]<-0;  init[VA4]<-0;  init[VA5]<-0; init[VA6]<-0;  # number vaccinated
+
+# Initial values for ODEs for H3N2
+	init[SAA1] <- SinitAH3[1];init[EAA1] <-1+Einit.fluAH3[1];	init[IAA1]<-Iinit.fluAH3[1];	init[RAA1]<-RinitAH3[1];init[cumIAA1] <- 0
+	init[SAA2] <- SinitAH3[2];init[EAA2] <-1+Einit.fluAH3[2];	init[IAA2]<-Iinit.fluAH3[2];	init[RAA2]<-RinitAH3[2];init[cumIAA2] <- 0
+	init[SAA3] <- SinitAH3[3];init[EAA3] <-1+Einit.fluAH3[3];	init[IAA3]<-Iinit.fluAH3[3];	init[RAA3]<-RinitAH3[3];init[cumIAA3] <- 0
+	init[SAA4] <- SinitAH3[4];init[EAA4] <-1+Einit.fluAH3[4];	init[IAA4]<-Iinit.fluAH3[4];	init[RAA4]<-RinitAH3[4];init[cumIAA4] <- 0
+	init[SAA5] <- SinitAH3[5];init[EAA5] <-1+Einit.fluAH3[5];	init[IAA5]<- Iinit.fluAH3[5];	init[RAA5]<-RinitAH3[5];init[cumIAA5]<- 0
+	init[SAA6] <- SinitAH3[6];init[EAA6] <-1+Einit.fluAH3[6];	init[IAA6]<- Iinit.fluAH3[6];	init[RAA6]<-RinitAH3[6];init[cumIAA6]<- 0
+	init[SAAV1]<-0;  init[SAAV2]<-0;  init[SAAV3]<-0;  init[SAAV4]<-0;  init[SAAV5]<-0; init[SAAV6]<-0;  # number suscept and vaccinated
+	init[VAA1]<-0;  init[VAA2]<-0;  init[VAA3]<-0;  init[VAA4]<-0;  init[VAA5]<-0; init[VAA6]<-0;  # number vaccinated
+
+# Initial values for ODEs for fluB		
+	init[SB1] <- SinitB[1];  	init[EB1] <- 1+ Einit.fluB[1];	init[IB1] <- Iinit.fluB[1];	init[RB1] <- RinitB[1] ; init[cumIB1] <- 0 
+	init[SB2] <- SinitB[2];  	init[EB2] <- 1+ Einit.fluB[2];	init[IB2] <- Iinit.fluB[2];	init[RB2] <- RinitB[2] ; init[cumIB2] <- 0 
+	init[SB3] <- SinitB[3];  	init[EB3] <- 1+ Einit.fluB[3];	init[IB3] <- Iinit.fluB[3];	init[RB3] <- RinitB[3] ; init[cumIB3] <- 0 
+	init[SB4] <- SinitB[4];  	init[EB4] <- 1+ Einit.fluB[4];	init[IB4] <- Iinit.fluB[4];	init[RB4] <- RinitB[4]; init[cumIB4] <- 0 
+	init[SB5] <- SinitB[5];  	init[EB5] <- 1+ Einit.fluB[5];	init[IB5] <- Iinit.fluB[5];	init[RB5] <- RinitB[5]; init[cumIB5] <- 0 
+	init[SB6] <- SinitB[6];  	init[EB6] <- 1+ Einit.fluB[6];	init[IB6] <- Iinit.fluB[6];	init[RB6] <- RinitB[6]; init[cumIB6] <- 0 
+	init[SBV1]<-0;  init[SBV2]<-0;  init[SBV3]<-0;  init[SBV4]<-0;  init[SBV5]<-0; init[SBV6]<-0;  # number suscept and vaccinated
+	init[VB1]<-0;  init[VB2]<-0;  init[VB3]<-0;  init[VB4]<-0;  init[VB5]<-0; init[VB6]<-0;  # number vaccinated
+
+
+ # Proportion immune by age categories based on prior elicitations
+	  propimmAH1[1]~dbeta(9.36,80.67)  # mean of .104 5 and [5%, 95%] quantiles of [.057, .16] 
+	  propimmAH1[2]~dbeta(10.456,71.875)  # mean of .127 5 and [5%, 95%] quantiles of [.07, .19]
+       propimmAH1[3]~dbeta(167.3,840)   #mean of .166 and [0.25, .975] intervals of [.14, .190] 
+       propimmAH1[4]~dbeta(167.3,840)   #mean of .166 and [0.25, .975] intervals of [.14, .190] 	  
+	  propimmAH1[5]~dbeta(27.6,116.1) #mean of .192, and [0.25, .975] intervals of [.13, .26] 
+       propimmAH1[6]~dbeta(10.73,46.96)  #mean of .186, and [0.25, .975] intervals of [.097, .295]         
+	  propimmAH3[1]~dbeta(9.36,80.67)  # mean of .104 5 and [5%, 95%] quantiles of [.057, .16] 
+	  propimmAH3[2]~dbeta(10.456,71.875)  # mean of .127 5 and [5%, 95%] quantiles of [.07, .19] 
+       propimmAH3[3]~dbeta(167.3,840)   #mean of .166 and [0.25, .975] intervals of [.14, .190] 
+       propimmAH3[4]~dbeta(167.3,840)   #mean of .166 and [0.25, .975] intervals of [.14, .190] 
+	  propimmAH3[5]~dbeta(27.6,116.1) #mean of .192, and [0.25, .975] intervals of [.13, .26] 
+        propimmAH3[6]~dbeta(10.73,46.96)  #mean of .186, and [0.25, .975] intervals of [.097, .295] 
+
+	  propimmB[1]~dbeta(9.36,80.67)  # mean of .104 5 and [5%, 95%] quantiles of [.057, .16] 
+	  propimmB[2]~dbeta(10.456,71.875)  # mean of .127 5 and [5%, 95%] quantiles of [.07, .19] 
+       propimmB[3]~dbeta(167.3,840)   #mean of .166 and [0.25, .975] intervals of [.14, .190] 
+       propimmB[4]~dbeta(167.3,840)   #mean of .166 and [0.25, .975] intervals of [.14, .190] 
+	  propimmB[5]~dbeta(27.6,116.1) #mean of .192, and [0.25, .975] intervals of [.13, .26] 
+        propimmB[6]~dbeta(10.73,46.96)  #mean of .186, and [0.25, .975] intervals of [.097, .295] 
+
+          propinitiallyinfectedfluAH1~dbeta(0.444, 88.38) #gives 90% CI of (0.00001, 0.02) i.e. plausible that up to about 2% initially infected
+          propinitiallyinfectedfluAH3~dbeta(0.444, 88.38) #gives 90% CI of (0.00001, 0.02)        
+          propinitiallyinfectedfluB~dbeta(0.444, 88.38) #gives 90% CI of (0.00001, 0.02) 
+	for(i in 1:6){
+	  num.immuneAH1[i]<- round(N[i]*propimmAH1[i])
+	  num.immuneAH3[i]<- round(N[i]*propimmAH3[i])
+	  num.immuneB[i]<- round(N[i]*propimmB[i])
+	  SinitB[i]<-N[i]-1-num.immuneB[i] -Einit.fluB[i] -Iinit.fluB[i]
+	  SinitAH1[i]<-N[i]-1-num.immuneAH1[i] -Einit.fluAH1[i] -Iinit.fluAH1[i]
+           SinitAH3[i]<-N[i]-1-num.immuneAH3[i] -Einit.fluAH3[i] -Iinit.fluAH3[i]
+	  RinitAH1[i]<-num.immuneAH1[i]  	  
+	  RinitAH3[i]<-num.immuneAH3[i]  
+	  RinitB[i]<-num.immuneB[i]
+	  	
+	  Iinit.fluAH1[i]<- normedevector[i] *Ntotal*  propinitiallyinfectedfluAH1	/2   
+	  Einit.fluAH1[i]<- normedevector[i] *Ntotal*  propinitiallyinfectedfluAH1	/2
+	  Iinit.fluAH3[i]<- normedevector[i] *Ntotal*  propinitiallyinfectedfluAH3	/2  
+	  Einit.fluAH3[i]<- normedevector[i] *Ntotal*  propinitiallyinfectedfluAH3	/2
+          Iinit.fluB[i]<- normedevector[i] *Ntotal*  propinitiallyinfectedfluB	/2   
+	  Einit.fluB[i]<- normedevector[i] *Ntotal*  propinitiallyinfectedfluB	/2
+	}
+          
+          
+# 7. Priors
+
+
+#Flu AH1 R0 parameters
+R0AH1mean<- 1.2
+R0AH1var<- .4
+R0AH1gamma.mu<-R0AH1mean/R0AH1var
+R0AH1gamma.r<-R0AH1gamma.mu*R0AH1mean
+#R0AH1~ dgamma(R0AH1gamma.r, R0AH1gamma.mu)
+R0AH1~ dunif(0.1,5)
+
+#Flu AH3 R0 parameters
+R0AH3mean<- 1.2
+R0AH3var<- .4
+R0AH3gamma.mu<-R0AH3mean/R0AH3var
+R0AH3gamma.r<-R0AH3gamma.mu*R0AH3mean
+#R0AH3~ dgamma(R0AH3gamma.r, R0AH3gamma.mu)
+R0AH3~ dunif(0.1,5)
+
+#Flu B R0 parameters
+R0Bmean<- 1.2
+R0Bvar<- .4
+R0Bgamma.mu<-R0Bmean/R0Bvar
+R0Bgamma.r<-R0Bgamma.mu*R0Bmean
+#R0B~ dgamma(R0Bgamma.r, R0Bgamma.mu)
+R0B~ dunif(0.1,5)
+
+# lambdaAH1, lambdaAH3 and lambdaB are constants that we multilpy beta matrix elements by to get tranmission parameter
+
+lambdaAH1<-R0AH1*recovAH1/maxevalBeta # define lambdaAH1 in terms of R0AH1 which depends on max  evalue of Beta
+lambdaAH3<-R0AH3*recovAH3/maxevalBeta # define lambdaAH3 in terms of R0AH3 which depends on max  evalue of Beta
+lambdaB<-R0B*recovB/maxevalBeta # define lambdaB in terms of R0B etc
+
+# reporting priors
+#Consider changing to reflect the fact that prob of reporting ILI may be very different for H3N2 compared to H1N1 and B.
+for(i in 1:n.age){
+ prob.ILI.reportedAH1[i]<- probILIperflucase[i]  # for now define this based on ILI data rather than estimate it 
+ prob.ILI.reportedAH3[i]<- probILIperflucase[i]  #
+ prob.ILI.reportedB[i]<- probILIperflucase[i]
+}
+
+probvirustesting~dbeta(1,1) # probablity of testing a patient for virus (assumed the same for all reportd ILI)
+test.sensitivity~dbeta(4.5,4.5) # gives 95% CIs of 0.2 and 0.8 assume the same for all three flu types
+fluAH1.test.sensitivity<-test.sensitivity # ~dbeta(4.5,4.5)  
+fluAH3.test.sensitivity<-test.sensitivity # ~dbeta(4.4,4.4)  
+fluB.test.sensitivity<-test.sensitivity # ~dbeta(4.4,4.4)
+#specifying informative priors for these  helps to  avoid the chain getting  stuck in flat low likelihood regions
+# far away from params consistent with the data (where typically sensitivity becomes very small and we get stupidly high R0 values)
+
+
+# Serial interval for flu is about 2.5 days 
+# We assume a mean latent period of 1, and and mean infections periods of 1.5 (gamma distributed)
+
+fAH1<-1 #  value chosen to give a latent period of 1 day
+fAH3<-1 
+fB<-1  #  value just made up to give a latent period of 1 day
+
+#  recov is rate at which infectious individuals recover and become immune (=1/average infectious period)
+#  We choose parameters for this to give a serial interval of about 2.5 days (see  for example Cauchemez PNAS 2011)
+inf.per.mean<- 1.5
+inf.per.var<- .01
+inf.per.gamma.mu<-inf.per.mean/inf.per.var
+inf.per.gamma.r<-inf.per.gamma.mu*inf.per.mean
+infectious.periodAH1~ dgamma(inf.per.gamma.r, inf.per.gamma.mu)
+infectious.periodAH3~ dgamma(inf.per.gamma.r, inf.per.gamma.mu)
+infectious.periodB~ dgamma(inf.per.gamma.r, inf.per.gamma.mu)
+recovAH1<-1/infectious.periodAH1
+recovAH3<-1/infectious.periodAH3
+recovB<-1/infectious.periodB
+serial.intervalAH1<- infectious.periodAH1 +1/fAH1
+serial.intervalAH3<- infectious.periodAH3 +1/fAH3
+serial.intervalB<- infectious.periodB +1/fB
+
+}
+

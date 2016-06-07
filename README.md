@@ -1,6 +1,14 @@
 # fluvaxmod
 Code and embedded data for Seasonal influenza vaccination for children in Thailand: a cost-effectiveness analysis
 
+This repository contains code and data required to reproduce the results in 
+Meeyai A, Praditsitthikorn N, Kotirum S, Kulpeng W, Putthasri W, Cooper BS,
+Teerawattananon Y. Seasonal influenza vaccination for children in Thailand: a
+cost-effectiveness analysis. PLoS Med. 2015 May 26;12(5):e1001829; discussion
+e1001829. doi: 10.1371/journal.pmed.1001829. eCollection 2015 May. PubMed PMID:
+26011712; PubMed Central PMCID: PMC4444096.
+
+http://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1001829
 
 To run the model: 
 
